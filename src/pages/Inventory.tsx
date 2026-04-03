@@ -1,193 +1,213 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
+import toast, { Toaster } from "react-hot-toast";
 
 interface Product {
   id: string;
   name: string;
-  initial_stock: number;
-  final_stock: number;
+  sale_price: number;
 }
 
-interface Entry {
+interface Movement {
   product_id: string;
   quantity: number;
-  date: string;
+  type: "IN" | "OUT";
+  created_at: string;
 }
 
-interface Output {
+interface Row {
   product_id: string;
-  quantity: number;
-  date: string;
+  name: string;
+  entriesByDate: Record<string, number>;
+  outputsByDate: Record<string, number>;
+  totalEntries: number;
+  totalOutputs: number;
+  sold: number;
+  revenue: number;
 }
 
-interface InventoryRow {
-  product_id: string;
-  product_name: string;
-  stock_initial: number;
-  total_entries: number;
-  total_outputs: number;
-  stock_final: number;
-}
-
-export default function Inventory() {
+export default function InventoryPro() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [outputs, setOutputs] = useState<Output[]>([]);
-  const [inventory, setInventory] = useState<InventoryRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [endDate, setEndDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [searchText, setSearchText] = useState("");
+  const [movements, setMovements] = useState<Movement[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+
+  // 🔒 Charger dernière date inventaire
+  useEffect(() => {
+    const loadLastInventory = async () => {
+      const { data } = await supabase
+        .from("inventories")
+        .select("inventory_date")
+        .order("inventory_date", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        setStartDate(data.inventory_date.slice(0, 10));
+      } else {
+        setStartDate(new Date().toISOString().slice(0, 10));
+      }
+    };
+
+    loadLastInventory();
+  }, []);
+
+  const getDates = () => {
+    const dates = [];
+    let d = new Date(startDate);
+    const end = new Date(endDate);
+
+    while (d <= end) {
+      dates.push(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+    return dates;
+  };
 
   const fetchData = async () => {
-    setLoading(true);
-    const { data: productsData } = await supabase.from<Product>("products").select("*");
-    const { data: entriesData } = await supabase
-      .from<Entry>("entries")
-      .select("*")
-      .gte("date", startDate)
-      .lte("date", endDate);
+    const { data: p } = await supabase.from("products").select("*");
 
-    const { data: outputsData } = await supabase
-      .from<Output>("outputs")
+    const { data: m } = await supabase
+      .from("stock_movements")
       .select("*")
-      .gte("date", startDate)
-      .lte("date", endDate);
+      .gte("created_at", startDate)
+      .lte("created_at", endDate);
 
-    setProducts(productsData || []);
-    setEntries(entriesData || []);
-    setOutputs(outputsData || []);
-    setLoading(false);
+    setProducts(p || []);
+    setMovements(m || []);
   };
 
   useEffect(() => {
-    fetchData();
+    if (startDate) fetchData();
   }, [startDate, endDate]);
 
   useEffect(() => {
-    const inv: InventoryRow[] = products.map((p) => {
-      const stockInitial = p.final_stock ?? p.initial_stock ?? 0;
-      const totalEntries = entries
-        .filter((e) => e.product_id === p.id)
-        .reduce((sum, e) => sum + e.quantity, 0);
-      const totalOutputs = outputs
-        .filter((o) => o.product_id === p.id)
-        .reduce((sum, o) => sum + o.quantity, 0);
-      const stockFinal = stockInitial + totalEntries - totalOutputs;
+    const dates = getDates();
+
+    const result: Row[] = products.map((p) => {
+      const entriesByDate: any = {};
+      const outputsByDate: any = {};
+      let totalEntries = 0;
+      let totalOutputs = 0;
+
+      dates.forEach((d) => {
+        const dayMovements = movements.filter(
+          (m) =>
+            m.product_id === p.id &&
+            m.created_at.slice(0, 10) === d
+        );
+
+        const entries = dayMovements
+          .filter((m) => m.type === "IN")
+          .reduce((s, m) => s + m.quantity, 0);
+
+        const outputs = dayMovements
+          .filter((m) => m.type === "OUT")
+          .reduce((s, m) => s + m.quantity, 0);
+
+        entriesByDate[d] = entries;
+        outputsByDate[d] = outputs;
+
+        totalEntries += entries;
+        totalOutputs += outputs;
+      });
+
       return {
         product_id: p.id,
-        product_name: p.name,
-        stock_initial: stockInitial,
-        total_entries: totalEntries,
-        total_outputs: totalOutputs,
-        stock_final: stockFinal,
+        name: p.name,
+        entriesByDate,
+        outputsByDate,
+        totalEntries,
+        totalOutputs,
+        sold: totalOutputs,
+        revenue: totalOutputs * (p.sale_price || 0),
       };
     });
-    setInventory(inv);
-  }, [products, entries, outputs]);
 
-  const handleSaveInventory = async () => {
-    for (let row of inventory) {
-      const { error } = await supabase
-        .from("products")
-        .update({ final_stock: row.stock_final })
-        .eq("id", row.product_id);
-      if (error) console.error(error);
+    setRows(result);
+  }, [products, movements]);
+
+  // 💾 SAVE INVENTORY
+  const saveInventory = async () => {
+    try {
+      const user = await supabase.auth.getUser();
+
+      const { data: org } = await supabase
+        .from("user_organizations")
+        .select("organization_id")
+        .single();
+
+      const payload = rows.map((r) => ({
+        product_id: r.product_id,
+        real_stock: r.totalEntries - r.totalOutputs,
+        unit_price: 0,
+      }));
+
+      const { error } = await supabase.rpc("process_full_inventory", {
+        p_org: org?.organization_id,
+        p_inventory_date: endDate,
+        p_created_by: user.data.user?.id,
+        p_products: payload,
+      });
+
+      if (error) throw error;
+
+      toast.success("Inventaire enregistré !");
+    } catch (err) {
+      toast.error("Erreur !");
     }
-    alert("Inventaire enregistré, les stocks finaux ont été mis à jour !");
-    fetchData();
   };
 
-  const filteredInventory = inventory.filter((inv) =>
-    inv.product_name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  const dates = getDates();
 
   return (
-    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-          Inventaire
-        </h1>
-        <div className="flex flex-col md:flex-row gap-2">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border px-3 py-2 rounded-lg"
-          />
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border px-3 py-2 rounded-lg"
-          />
-          <button
-            onClick={handleSaveInventory}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-          >
-            Enregistrer l’inventaire
-          </button>
-        </div>
+    <div className="p-6">
+      <Toaster />
+
+      <h1 className="text-2xl font-bold mb-4">Inventaire PRO</h1>
+
+      <div className="flex gap-2 mb-4">
+        <input type="date" value={startDate} disabled className="border p-2"/>
+        <input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="border p-2"/>
+        <button onClick={saveInventory} className="bg-green-600 text-white px-4">Enregistrer</button>
       </div>
 
-      <input
-        type="text"
-        placeholder="Rechercher un produit..."
-        value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
-        className="w-full md:w-1/3 mb-4 px-3 py-2 border rounded-lg"
-      />
+      <div className="overflow-auto">
+        <table className="min-w-full border">
+          <thead>
+            <tr>
+              <th rowSpan={2}>Produit</th>
+              <th colSpan={dates.length}>Entrées</th>
+              <th colSpan={dates.length}>Sorties</th>
+              <th rowSpan={2}>Total Entrées</th>
+              <th rowSpan={2}>Total Sorties</th>
+              <th rowSpan={2}>Vendu</th>
+              <th rowSpan={2}>CA</th>
+            </tr>
+            <tr>
+              {dates.map(d => <th key={"e"+d}>{d}</th>)}
+              {dates.map(d => <th key={"s"+d}>{d}</th>)}
+            </tr>
+          </thead>
 
-      {loading ? (
-        <div className="flex justify-center items-center h-64 text-gray-500 dark:text-gray-300">
-          Chargement...
-        </div>
-      ) : (
-        <>
-          {/* Desktop Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="min-w-full bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-              <thead className="bg-gray-100 dark:bg-gray-700">
-                <tr>
-                  <th className="py-2 px-4 text-left">Produit</th>
-                  <th className="py-2 px-4 text-right">Stock Initial</th>
-                  <th className="py-2 px-4 text-right">Entrées</th>
-                  <th className="py-2 px-4 text-right">Sorties</th>
-                  <th className="py-2 px-4 text-right">Stock Final</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredInventory.map((inv) => (
-                  <tr key={inv.product_id} className="border-b dark:border-gray-700">
-                    <td className="py-2 px-4">{inv.product_name}</td>
-                    <td className="py-2 px-4 text-right">{inv.stock_initial}</td>
-                    <td className="py-2 px-4 text-right">{inv.total_entries}</td>
-                    <td className="py-2 px-4 text-right">{inv.total_outputs}</td>
-                    <td className="py-2 px-4 text-right">{inv.stock_final}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.product_id}>
+                <td>{r.name}</td>
 
-          {/* Mobile Cards */}
-          <div className="md:hidden grid grid-cols-1 gap-4">
-            {filteredInventory.map((inv) => (
-              <div key={inv.product_id} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow space-y-1">
-                <div className="font-bold">{inv.product_name}</div>
-                <div>Stock Initial: {inv.stock_initial}</div>
-                <div>Entrées: {inv.total_entries}</div>
-                <div>Sorties: {inv.total_outputs}</div>
-                <div className="font-semibold">Stock Final: {inv.stock_final}</div>
-              </div>
+                {dates.map(d => <td key={d}>{r.entriesByDate[d]}</td>)}
+                {dates.map(d => <td key={d}>{r.outputsByDate[d]}</td>)}
+
+                <td>{r.totalEntries}</td>
+                <td>{r.totalOutputs}</td>
+                <td>{r.sold}</td>
+                <td>{r.revenue}</td>
+              </tr>
             ))}
-          </div>
-        </>
-      )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -1,334 +1,306 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../services/supabaseClient";
+import { useOrganization } from "../hooks/useOrganization";
+import toast, { Toaster } from "react-hot-toast";
+import { X, Search } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Product {
   id: string;
   name: string;
   sale_price: number;
-  final_stock: number;
-  organization_id: string;
 }
 
 interface Output {
   id: string;
-  product_id: string;
   product_name: string;
   quantity: number;
   unit_price: number;
-  date: string;
+  created_at: string;
 }
 
 export default function Outputs() {
-  const [outputs, setOutputs] = useState<Output[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { organizationId } = useOrganization();
 
+  const [products, setProducts] = useState<Product[]>([]);
+  const [outputs, setOutputs] = useState<Output[]>([]);
+  const [stocks, setStocks] = useState<Record<string, number>>({});
   const [showModal, setShowModal] = useState(false);
-  const [editingOutput, setEditingOutput] = useState<Output | null>(null);
+
+  const [search, setSearch] = useState("");
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
     product_id: "",
-    quantity: 0,
+    remaining_stock: 0,
     unit_price: 0,
-    date: new Date().toISOString().slice(0, 10),
+    date: new Date().toISOString().slice(0, 16),
   });
 
-  const [searchText, setSearchText] = useState("");
-
-  // 🔥 GET ORGANIZATION
-  const getOrganization = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return null;
-
+  // ================= FETCH =================
+  const fetchProducts = async () => {
     const { data } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .eq("user_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    return data?.organization_id || null;
-  };
-
-  // 🔥 FETCH PRODUCTS
-  const fetchProducts = async (orgId: string) => {
-    const { data, error } = await supabase
       .from("products")
-      .select("*")
-      .eq("organization_id", orgId);
+      .select("id,name,sale_price")
+      .eq("organization_id", organizationId);
 
-    if (error) console.error(error);
-    else setProducts(data || []);
-  };
-
-  // 🔥 FETCH OUTPUTS
-  const fetchOutputs = async (orgId: string) => {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("outputs")
-      .select("*, products(name)")
-      .eq("organization_id", orgId)
-      .order("date", { ascending: false });
-
-    if (error) {
-      console.error(error);
-    } else {
-      const formatted = data?.map((item: any) => ({
-        ...item,
-        product_name: item.products?.name || "Produit inconnu",
-      }));
-
-      setOutputs(formatted || []);
+    if (data) {
+      setProducts(data);
+      setFilteredProducts(data);
     }
-
-    setLoading(false);
   };
 
-  // 🔥 INIT
+  const fetchStocks = async () => {
+    const { data } = await supabase
+      .from("product_stock")
+      .select("product_id,stock")
+      .eq("organization_id", organizationId);
+
+    if (data) {
+      const map: Record<string, number> = {};
+      data.forEach((s) => (map[s.product_id] = s.stock));
+      setStocks(map);
+    }
+  };
+
+  const fetchOutputs = async () => {
+    const { data } = await supabase
+      .from("stock_movements")
+      .select("id,quantity,unit_price,created_at,products(name)")
+      .eq("organization_id", organizationId)
+      .eq("type", "OUT")
+      .order("created_at", { ascending: false });
+
+    if (data) {
+      setOutputs(
+        data.map((o: any) => ({
+          id: o.id,
+          product_name: o.products?.name,
+          quantity: o.quantity,
+          unit_price: o.unit_price,
+          created_at: o.created_at,
+        }))
+      );
+    }
+  };
+
   useEffect(() => {
-    const init = async () => {
-      const org = await getOrganization();
-
-      if (!org) {
-        console.warn("Aucune organisation");
-        return;
-      }
-
-      setOrgId(org);
-
-      await Promise.all([fetchProducts(org), fetchOutputs(org)]);
-    };
-
-    init();
-  }, []);
-
-  // 🔥 ADD / EDIT
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    if (!formData.product_id || !orgId) {
-      alert("Produit requis");
-      return;
+    if (organizationId) {
+      fetchProducts();
+      fetchStocks();
+      fetchOutputs();
     }
+  }, [organizationId]);
 
-    try {
-      if (editingOutput) {
-        // UPDATE
-        const { error } = await supabase
-          .from("outputs")
-          .update(formData)
-          .eq("id", editingOutput.id);
-
-        if (error) throw error;
-      } else {
-        // INSERT
-        const { error } = await supabase.from("outputs").insert([
-          {
-            ...formData,
-            organization_id: orgId,
-          },
-        ]);
-
-        if (error) throw error;
-
-        // 🔥 UPDATE STOCK
-        const { data: product } = await supabase
-          .from("products")
-          .select("final_stock")
-          .eq("id", formData.product_id)
-          .single();
-
-        if (product) {
-          const newStock = (product.final_stock || 0) - formData.quantity;
-
-          if (newStock < 0) {
-            alert("Stock insuffisant !");
-            return;
-          }
-
-          const { error: stockError } = await supabase
-            .from("products")
-            .update({ final_stock: newStock })
-            .eq("id", formData.product_id);
-
-          if (stockError) throw stockError;
-        }
-      }
-
-      setShowModal(false);
-      fetchOutputs(orgId);
-    } catch (err) {
-      console.error("Erreur:", err);
-    }
-  };
-
-  // 🔥 DELETE
-  const handleDelete = async (id: string) => {
-    if (!confirm("Supprimer cette sortie ?")) return;
-
-    const { error } = await supabase.from("outputs").delete().eq("id", id);
-
-    if (error) console.error(error);
-    else fetchOutputs(orgId!);
-  };
-
-  const handleEdit = (o: Output) => {
-    setEditingOutput(o);
-    setFormData({
-      product_id: o.product_id,
-      quantity: o.quantity,
-      unit_price: o.unit_price,
-      date: o.date,
-    });
-    setSearchText(o.product_name);
-    setShowModal(true);
-  };
-
-  const handleAdd = () => {
-    setEditingOutput(null);
-    setFormData({
-      product_id: "",
-      quantity: 0,
-      unit_price: 0,
-      date: new Date().toISOString().slice(0, 10),
-    });
-    setSearchText("");
-    setShowModal(true);
-  };
+  // ================= SEARCH =================
+  useEffect(() => {
+    setFilteredProducts(
+      products.filter((p) =>
+        p.name.toLowerCase().includes(search.toLowerCase())
+      )
+    );
+  }, [search, products]);
 
   const handleSelectProduct = (p: Product) => {
+    setSelectedProduct(p);
     setFormData({
       ...formData,
       product_id: p.id,
-      unit_price: p.sale_price,
+      unit_price: p.sale_price, // 🔥 auto prix
     });
-    setSearchText(p.name);
+    setSearch(p.name);
   };
 
-  const filteredProducts = products.filter((p) =>
-    p.name.toLowerCase().includes(searchText.toLowerCase())
-  );
+  // ================= SUBMIT =================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  // UI
-  if (loading) return <div className="text-center mt-10">Chargement...</div>;
+    if (!formData.product_id) return toast.error("Choisir un produit");
 
+    try {
+      const { error } = await supabase.rpc("create_output", {
+        p_product: formData.product_id,
+        p_org: organizationId,
+        p_remaining: Number(formData.remaining_stock),
+        p_price: Number(formData.unit_price),
+        p_date: new Date(formData.date).toISOString(),
+      });
+
+      if (error) throw error;
+
+      toast.success("Sortie enregistrée 🚀");
+
+      setShowModal(false);
+      setSearch("");
+      setSelectedProduct(null);
+
+      fetchOutputs();
+      fetchStocks();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const currentStock = stocks[formData.product_id] || 0;
+  const sortie = currentStock - Number(formData.remaining_stock || 0);
+
+  // ================= UI =================
   return (
-    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="flex justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Sorties
-        </h1>
+    <div className="p-4 md:p-6">
+      <Toaster />
 
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold">Sorties</h1>
         <button
-          onClick={handleAdd}
-          className="bg-red-600 text-white px-4 py-2 rounded-lg"
+          onClick={() => {
+            setShowModal(true);
+            setTimeout(() => searchRef.current?.focus(), 200);
+          }}
+          className="bg-red-600 text-white px-4 py-2 rounded-xl"
         >
-          Ajouter
+          + Nouvelle sortie
         </button>
       </div>
 
-      {/* LIST */}
-      <div className="space-y-3">
-        {outputs.map((o) => (
-          <div
-            key={o.id}
-            className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow flex justify-between"
-          >
-            <div>
-              <div className="font-bold">{o.product_name}</div>
-              <div className="text-sm text-gray-500">
-                {o.quantity} × {o.unit_price}
-              </div>
-            </div>
+      {/* TABLE */}
+      <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow">
+        <table className="w-full">
+          <thead className="bg-gray-100 dark:bg-gray-800">
+            <tr>
+              <th className="p-3">Produit</th>
+              <th className="p-3">Quantité</th>
+              <th className="p-3">Prix</th>
+              <th className="p-3">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {outputs.map((o) => (
+              <tr key={o.id} className="border-b text-center">
+                <td className="p-3">{o.product_name}</td>
+                <td className="p-3 text-red-600 font-bold">
+                  -{o.quantity}
+                </td>
+                <td>{o.unit_price}</td>
+                <td className="text-xs text-gray-500">
+                  {new Date(o.created_at).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-            <div className="space-x-2">
-              <button
-                onClick={() => handleEdit(o)}
-                className="bg-yellow-500 text-white px-2 py-1 rounded"
-              >
-                Modifier
-              </button>
-              <button
-                onClick={() => handleDelete(o.id)}
-                className="bg-red-500 text-white px-2 py-1 rounded"
-              >
-                Supprimer
-              </button>
+      {/* MOBILE */}
+      <div className="md:hidden grid gap-4">
+        {outputs.map((o) => (
+          <div key={o.id} className="bg-white dark:bg-gray-900 p-4 rounded-xl shadow">
+            <div className="flex justify-between">
+              <span>{o.product_name}</span>
+              <span className="text-red-600 font-bold">-{o.quantity}</span>
             </div>
+            <div className="text-sm text-gray-500">{o.unit_price}</div>
           </div>
         ))}
       </div>
 
-      {/* MODAL */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md space-y-4"
+      {/* MODAL PREMIUM */}
+      <AnimatePresence>
+        {showModal && (
+          <motion.div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
-            <h2 className="font-bold text-lg text-gray-900 dark:text-white">
-              {editingOutput ? "Modifier" : "Ajouter"}
-            </h2>
-
-            <input
-              placeholder="Rechercher produit"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="w-full border p-2 rounded"
-            />
-
-            {filteredProducts.map((p) => (
-              <div
-                key={p.id}
-                onClick={() => handleSelectProduct(p)}
-                className="cursor-pointer hover:bg-gray-200 p-2"
-              >
-                {p.name} (stock: {p.final_stock})
+            <motion.form
+              onSubmit={handleSubmit}
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl"
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+            >
+              <div className="flex justify-between mb-4">
+                <h2 className="font-bold text-lg">Nouvelle sortie</h2>
+                <X onClick={() => setShowModal(false)} className="cursor-pointer" />
               </div>
-            ))}
 
-            <input
-              type="number"
-              placeholder="Quantité"
-              value={formData.quantity}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  quantity: Number(e.target.value),
-                })
-              }
-              className="w-full border p-2 rounded"
-            />
+              {/* SEARCH PRODUCT */}
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+                <input
+                  ref={searchRef}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Rechercher produit..."
+                  className="w-full pl-10 p-3 rounded-xl border dark:bg-gray-800"
+                />
 
-            <input
-              type="date"
-              value={formData.date}
-              onChange={(e) =>
-                setFormData({ ...formData, date: e.target.value })
-              }
-              className="w-full border p-2 rounded"
-            />
+                {search && (
+                  <div className="absolute w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow max-h-40 overflow-auto z-10">
+                    {filteredProducts.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => handleSelectProduct(p)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                      >
+                        {p.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 bg-gray-400 rounded"
-              >
-                Annuler
+              {/* STOCK */}
+              <div className="text-sm mb-2">
+                Stock: <b>{currentStock}</b>
+              </div>
+
+              <input
+                type="number"
+                placeholder="Stock restant"
+                className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    remaining_stock: Number(e.target.value),
+                  })
+                }
+              />
+
+              <div className="text-sm mb-3">
+                Sortie: <b className="text-red-600">{sortie > 0 ? sortie : 0}</b>
+              </div>
+
+              <input
+                type="number"
+                value={formData.unit_price}
+                className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    unit_price: Number(e.target.value),
+                  })
+                }
+              />
+
+              <input
+                type="datetime-local"
+                value={formData.date}
+                className="w-full mb-4 p-3 rounded-xl border dark:bg-gray-800"
+                onChange={(e) =>
+                  setFormData({ ...formData, date: e.target.value })
+                }
+              />
+
+              <button className="w-full bg-red-600 text-white py-3 rounded-xl">
+                Enregistrer
               </button>
-              <button className="px-4 py-2 bg-red-600 text-white rounded">
-                Valider
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

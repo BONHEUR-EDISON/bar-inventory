@@ -11,15 +11,15 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  // ✅ Fonction pour récupérer l'organisation d'un utilisateur
-  const getUserOrganization = async (userId: string) => {
+  // Récupérer l'organisation de l'utilisateur
+  const getUserOrganization = async (userId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase
         .from("user_organizations")
         .select("organization_id")
         .eq("user_id", userId)
         .limit(1)
-        .maybeSingle(); // Retourne null si pas de ligne
+        .maybeSingle();
 
       if (error) {
         console.error("Erreur récupération org:", error);
@@ -28,40 +28,34 @@ export default function Login() {
 
       return data?.organization_id || null;
     } catch (err) {
-      console.error("Erreur getUserOrganization:", err);
+      console.error(err);
       return null;
     }
   };
 
-  // ✅ Vérifie la session existante au montage (Strict Mode friendly)
+  // Vérifie la session existante
   useEffect(() => {
     let isMounted = true;
 
     const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
 
-        if (!user || !isMounted) return;
+      if (!user || !isMounted) return;
 
-        const orgId = await getUserOrganization(user.id);
-        if (orgId) localStorage.setItem("organization_id", orgId);
+      const orgId = await getUserOrganization(user.id);
+      if (orgId) localStorage.setItem("organization_id", orgId);
 
-        navigate("/dashboard");
-      } catch (err) {
-        console.error("Échec récupération session:", err);
-      }
+      navigate("/dashboard");
     };
 
     checkSession();
 
-    return () => {
-      isMounted = false; // annule les mises à jour si composant démonté
-    };
+    return () => { isMounted = false; };
   }, [navigate]);
 
-  // ✅ Handler login
-  const handleLogin = async (e: React.FormEvent) => {
+  // Connexion
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
@@ -77,8 +71,7 @@ export default function Login() {
         return;
       }
 
-      const userId = data.user.id;
-      const orgId = await getUserOrganization(userId);
+      const orgId = await getUserOrganization(data.user.id);
 
       if (!orgId) {
         setError("Aucune organisation trouvée pour cet utilisateur");
@@ -87,8 +80,9 @@ export default function Login() {
 
       localStorage.setItem("organization_id", orgId);
       navigate("/dashboard");
+
     } catch (err) {
-      console.error("Login error:", err);
+      console.error(err);
       setError("Erreur de connexion");
     } finally {
       setLoading(false);
@@ -96,22 +90,30 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6 text-center">Connexion</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        
+        {/* HEADER */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-gray-800">Welcome Back 👋</h1>
+          <p className="text-gray-500 mt-2 text-sm">Connecte-toi pour continuer</p>
+        </div>
 
+        {/* ERROR */}
         {error && (
-          <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">
+          <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        {/* FORM */}
+        <form onSubmit={handleLogin} className="space-y-5">
           <div>
-            <label className="block mb-1 font-medium text-gray-700">Email</label>
+            <label className="text-sm font-medium text-gray-600">Email</label>
             <input
               type="email"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="ex: email@gmail.com"
+              className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -119,26 +121,31 @@ export default function Login() {
           </div>
 
           <div>
-            <label className="block mb-1 font-medium text-gray-700">Mot de passe</label>
+            <label className="text-sm font-medium text-gray-600">Mot de passe</label>
             <input
               type="password"
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="••••••••"
+              className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
             />
           </div>
 
+          {/* BUTTON */}
           <button
             type="submit"
-            className={`w-full py-2 px-4 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition ${
-              loading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
             disabled={loading}
+            className={`w-full py-3 rounded-lg font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition duration-200 shadow-md ${
+              loading ? "opacity-60 cursor-not-allowed" : ""
+            }`}
           >
             {loading ? "Connexion..." : "Se connecter"}
           </button>
         </form>
+
+        {/* FOOTER */}
+        <p className="text-center text-xs text-gray-400 mt-6">© 2026 MyApp</p>
       </div>
     </div>
   );

@@ -1,308 +1,369 @@
 -- =========================
--- EXTENSIONS
+-- CLEAN
 -- =========================
+drop function if exists public.process_full_inventory cascade;
+drop function if exists public.get_current_stock cascade;
+drop function if exists public.handle_new_user cascade;
+drop function if exists public.log_stock_changes cascade;
+
+drop table if exists public.inventory_items cascade;
+drop table if exists public.inventories cascade;
+drop table if exists public.stock_movements cascade;
+drop table if exists public.final_stock cascade;
+drop table if exists public.products cascade;
+drop table if exists public.user_organizations cascade;
+drop table if exists public.organizations cascade;
+
 create extension if not exists "uuid-ossp";
 
 -- =========================
 -- ORGANIZATIONS
 -- =========================
-create table if not exists public.organizations (
+create table public.organizations (
     id uuid primary key default uuid_generate_v4(),
     name text not null,
-    created_by uuid references auth.users(id) on delete set null,
+    created_by uuid references auth.users(id),
     created_at timestamp default now()
 );
 
 -- =========================
--- USER ↔ ORGANIZATION
+-- USER ORG
 -- =========================
-create table if not exists public.user_organizations (
+create table public.user_organizations (
     id uuid primary key default uuid_generate_v4(),
-    user_id uuid not null references auth.users(id) on delete cascade,
-    organization_id uuid not null references public.organizations(id) on delete cascade,
-    role text not null default 'member',
-    created_at timestamp default now(),
-    unique (user_id, organization_id)
-);
-
--- =========================
--- INVITATIONS
--- =========================
-create table if not exists public.invitations (
-    id uuid primary key default uuid_generate_v4(),
-    email text not null,
-    organization_id uuid not null references public.organizations(id) on delete cascade,
-    role text default 'member',
-    token uuid default uuid_generate_v4(),
-    accepted boolean default false,
-    invited_by uuid references auth.users(id) on delete set null,
-    created_at timestamp default now()
-);
-
--- =========================
--- USER SETTINGS
--- =========================
-create table if not exists public.user_settings (
-    id uuid primary key default uuid_generate_v4(),
-    user_id uuid unique references auth.users(id) on delete cascade,
-    theme text default 'light',
-    created_at timestamp default now()
-);
-
--- =========================
--- AUDIT LOGS
--- =========================
-create table if not exists public.audit_logs (
-    id uuid primary key default uuid_generate_v4(),
-    user_id uuid references auth.users(id) on delete set null,
-    action text,
+    user_id uuid references auth.users(id) on delete cascade,
     organization_id uuid references public.organizations(id) on delete cascade,
-    created_at timestamp default now()
+    role text default 'member',
+    created_at timestamp default now(),
+    unique(user_id, organization_id)
 );
 
 -- =========================
 -- PRODUCTS
 -- =========================
-create table if not exists public.products (
+create table public.products (
     id uuid primary key default uuid_generate_v4(),
     organization_id uuid references public.organizations(id) on delete cascade,
     name text not null,
     initial_stock numeric default 0,
-    purchase_price numeric default 0,
     sale_price numeric default 0,
+    min_stock numeric default 5,
     created_at timestamp default now()
 );
 
 -- =========================
--- ENTRIES (ajouts de stock)
+-- FINAL STOCK
 -- =========================
-create table if not exists public.entries (
-    id uuid primary key default uuid_generate_v4(),
-    organization_id uuid references public.organizations(id) on delete cascade,
-    product_id uuid references public.products(id) on delete cascade,
-    quantity numeric not null,
-    unit_price numeric not null,
-    date date not null default now(),
-    created_at timestamp default now()
-);
-
--- =========================
--- OUTPUTS (ventes / sorties)
--- =========================
-create table if not exists public.outputs (
-    id uuid primary key default uuid_generate_v4(),
-    organization_id uuid references public.organizations(id) on delete cascade,
-    product_id uuid references public.products(id) on delete cascade,
-    quantity numeric not null,
-    unit_price numeric not null,
-    total numeric generated always as (quantity * unit_price) stored,
-    date date not null default now(),
-    created_at timestamp default now()
-);
-
--- =========================
--- EXPENSES
--- =========================
-create table if not exists public.expenses (
-    id uuid primary key default uuid_generate_v4(),
-    organization_id uuid references public.organizations(id) on delete cascade,
-    label text not null,
-    amount numeric not null,
-    date date not null default now(),
-    created_at timestamp default now()
-);
-
--- =========================
--- FINAL STOCK (pour inventaire)
--- =========================
-create table if not exists public.final_stock (
+create table public.final_stock (
     id uuid primary key default uuid_generate_v4(),
     product_id uuid references public.products(id) on delete cascade,
     organization_id uuid references public.organizations(id) on delete cascade,
     stock numeric not null,
-    last_inventory_date date not null,
-    created_at timestamp default now(),
+    last_inventory_date timestamp,
     unique(product_id, organization_id)
 );
 
 -- =========================
--- INDEXES
+-- STOCK MOVEMENTS
 -- =========================
-create index if not exists idx_products_org on products(organization_id);
-create index if not exists idx_entries_product on entries(product_id);
-create index if not exists idx_entries_org on entries(organization_id);
-create index if not exists idx_entries_date on entries(date);
-create index if not exists idx_outputs_product on outputs(product_id);
-create index if not exists idx_outputs_org on outputs(organization_id);
-create index if not exists idx_outputs_date on outputs(date);
-create index if not exists idx_expenses_org on expenses(organization_id);
-create index if not exists idx_expenses_date on expenses(date);
-create index if not exists idx_final_stock_org on final_stock(organization_id);
+create table public.stock_movements (
+    id uuid primary key default uuid_generate_v4(),
+    product_id uuid references public.products(id) on delete cascade,
+    organization_id uuid references public.organizations(id) on delete cascade,
+    type text check (type in ('IN','OUT')),
+    quantity numeric not null,
+    source text,
+    created_at timestamp default now()
+);
 
 -- =========================
--- ENABLE RLS
+-- INVENTORIES
 -- =========================
-alter table public.products enable row level security;
-alter table public.entries enable row level security;
-alter table public.outputs enable row level security;
-alter table public.expenses enable row level security;
+create table public.inventories (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid references public.organizations(id) on delete cascade,
+    created_by uuid references auth.users(id),
+    inventory_date timestamp not null,
+    total_value numeric default 0,
+    created_at timestamp default now()
+);
+
+-- =========================
+-- INVENTORY ITEMS
+-- =========================
+create table public.inventory_items (
+    id uuid primary key default uuid_generate_v4(),
+    inventory_id uuid references public.inventories(id) on delete cascade,
+    product_id uuid references public.products(id) on delete cascade,
+    product_name text,
+    theoretical_stock numeric,
+    real_stock numeric,
+    difference numeric,
+    movement_type text,
+    unit_price numeric,
+    total_price numeric,
+    created_at timestamp default now()
+);
+
+-- =========================
+-- INDEX
+-- =========================
+create index idx_products_org on public.products(organization_id);
+create index idx_movements_product_org on public.stock_movements(product_id, organization_id);
+create index idx_final_stock on public.final_stock(product_id, organization_id);
+
+-- =========================
+-- RLS
+-- =========================
 alter table public.organizations enable row level security;
 alter table public.user_organizations enable row level security;
-alter table public.invitations enable row level security;
-alter table public.user_settings enable row level security;
-alter table public.audit_logs enable row level security;
+alter table public.products enable row level security;
+alter table public.stock_movements enable row level security;
 alter table public.final_stock enable row level security;
+alter table public.inventories enable row level security;
+alter table public.inventory_items enable row level security;
 
 -- =========================
--- POLICIES (RLS)
+-- POLICIES SAFE
 -- =========================
-create policy "products access" on products for all
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
+create policy org_access
+on public.organizations
+for select
+using (
+    id in (
+        select organization_id
+        from public.user_organizations
+        where user_id = auth.uid()
+    )
+);
 
-create policy "entries access" on entries for all
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
-
-create policy "outputs access" on outputs for all
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
-
-create policy "expenses access" on expenses for all
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
-
-create policy "org_select" on organizations for select
-using (id in (select organization_id from user_organizations where user_id = auth.uid()));
-
-create policy "membership_select" on user_organizations for select
+create policy user_org_access
+on public.user_organizations
+for all
 using (user_id = auth.uid());
 
-create policy "membership_insert_admin" on user_organizations for insert
-with check (exists (select 1 from user_organizations uo where uo.user_id = auth.uid() and uo.organization_id = user_organizations.organization_id and uo.role in ('owner', 'admin')));
+create policy products_access
+on public.products
+for all
+using (
+    organization_id in (
+        select organization_id from public.user_organizations where user_id = auth.uid()
+    )
+);
 
-create policy "invitation_select" on invitations for select
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
+create policy movements_access
+on public.stock_movements
+for all
+using (
+    organization_id in (
+        select organization_id from public.user_organizations where user_id = auth.uid()
+    )
+);
 
-create policy "invitation_insert_admin" on invitations for insert
-with check (exists (select 1 from user_organizations uo where uo.user_id = auth.uid() and uo.organization_id = invitations.organization_id and uo.role in ('owner', 'admin')));
+create policy final_stock_access
+on public.final_stock
+for all
+using (
+    organization_id in (
+        select organization_id from public.user_organizations where user_id = auth.uid()
+    )
+);
 
-create policy "settings_select" on user_settings for select
-using (user_id = auth.uid());
+create policy inventory_access
+on public.inventories
+for all
+using (
+    organization_id in (
+        select organization_id from public.user_organizations where user_id = auth.uid()
+    )
+);
 
-create policy "settings_insert" on user_settings for insert
-with check (user_id = auth.uid());
-
-create policy "audit_select" on audit_logs for select
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
-
-create policy "final_stock_access" on final_stock for all
-using (organization_id in (select organization_id from user_organizations where user_id = auth.uid()));
+create policy inventory_items_access
+on public.inventory_items
+for all
+using (
+    inventory_id in (
+        select id from public.inventories
+        where organization_id in (
+            select organization_id from public.user_organizations where user_id = auth.uid()
+        )
+    )
+);
 
 -- =========================
--- FUNCTION: HANDLE NEW USER
+-- AUTO CREATE ORG FOR USER
 -- =========================
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
     org_id uuid;
 begin
-    insert into public.organizations (name, created_by)
+    insert into public.organizations(name, created_by)
     values ('My Organization', new.id)
     returning id into org_id;
 
-    insert into public.user_organizations (user_id, organization_id, role)
+    insert into public.user_organizations(user_id, organization_id, role)
     values (new.id, org_id, 'owner');
-
-    insert into public.user_settings (user_id)
-    values (new.id);
 
     return new;
 end;
 $$ language plpgsql security definer;
-
--- =========================
--- TRIGGER: ON AUTH USER CREATED
--- =========================
-drop trigger if exists on_auth_user_created on auth.users;
 
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
 -- =========================
--- INVENTAIRE AUTOMATIQUE
+-- GET CURRENT STOCK
 -- =========================
-create or replace function public.run_inventory(date_start date, date_end date, org uuid)
-returns table(
-    product_id uuid,
-    product_name text,
-    stock_initial numeric,
-    total_entries numeric,
-    total_outputs numeric,
-    final_stock numeric
-) as $$
+create or replace function public.get_current_stock(
+    p_product uuid,
+    p_org uuid,
+    p_date timestamp default now()
+)
+returns numeric as $$
 begin
-    return query
-    with last_stock as (
+    return (
         select
-            p.id as product_id,
-            p.name as product_name,
-            coalesce(fs.stock, p.initial_stock) as stock_initial
-        from public.products p
-        left join lateral (
-            select f.stock
-            from public.final_stock f
-            where f.product_id = p.id
-              and f.organization_id = org
-            order by f.last_inventory_date desc
-            limit 1
-        ) fs on true
-        where p.organization_id = org
-    ),
-    entries_sum as (
-        select
-            product_id,
-            sum(quantity) as total_entries
-        from public.entries
-        where organization_id = org
-          and date >= date_start
-          and date <= date_end
-        group by product_id
-    ),
-    outputs_sum as (
-        select
-            product_id,
-            sum(quantity) as total_outputs
-        from public.outputs
-        where organization_id = org
-          and date >= date_start
-          and date <= date_end
-        group by product_id
-    )
-    select
-        ls.product_id,
-        ls.product_name,
-        ls.stock_initial,
-        coalesce(e.total_entries,0) as total_entries,
-        coalesce(o.total_outputs,0) as total_outputs,
-        ls.stock_initial + coalesce(e.total_entries,0) - coalesce(o.total_outputs,0) as final_stock
-    from last_stock ls
-    left join entries_sum e on e.product_id = ls.product_id
-    left join outputs_sum o on o.product_id = ls.product_id;
+            coalesce(fs.stock, 0) +
+            coalesce(sum(
+                case
+                    when sm.type = 'IN' then sm.quantity
+                    when sm.type = 'OUT' then -sm.quantity
+                end
+            ), 0)
+        from public.final_stock fs
+        left join public.stock_movements sm
+            on sm.product_id = fs.product_id
+            and sm.organization_id = fs.organization_id
+            and sm.created_at > coalesce(fs.last_inventory_date, '1970-01-01')
+            and sm.created_at <= p_date
+        where fs.product_id = p_product
+        and fs.organization_id = p_org
+    );
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql;
 
 -- =========================
--- ENREGISTRER L'INVENTAIRE
+-- FULL INVENTORY FUNCTION
 -- =========================
-create or replace function public.save_inventory(date_start date, date_end date, org uuid)
+create or replace function public.process_full_inventory(
+    p_org uuid,
+    p_inventory_date timestamp,
+    p_created_by uuid,
+    p_products jsonb
+)
 returns void as $$
 declare
-    rec record;
+    v_inventory_id uuid;
+    item jsonb;
+
+    v_product uuid;
+    v_real_stock numeric;
+    v_unit_price numeric;
+
+    v_theoretical numeric;
+    v_diff numeric;
+    v_type text;
+
+    v_total numeric := 0;
 begin
-    for rec in select * from public.run_inventory(date_start, date_end, org)
+    insert into public.inventories (
+        organization_id,
+        created_by,
+        inventory_date
+    )
+    values (
+        p_org,
+        p_created_by,
+        p_inventory_date
+    )
+    returning id into v_inventory_id;
+
+    for item in select * from jsonb_array_elements(p_products)
     loop
-        insert into public.final_stock(product_id, organization_id, stock, last_inventory_date, created_at)
-        values (rec.product_id, org, rec.final_stock, date_end, now())
+        v_product := (item->>'product_id')::uuid;
+        v_real_stock := (item->>'real_stock')::numeric;
+        v_unit_price := coalesce((item->>'unit_price')::numeric, 0);
+
+        v_theoretical := public.get_current_stock(v_product, p_org, p_inventory_date);
+        v_diff := v_real_stock - v_theoretical;
+
+        if v_diff = 0 then
+            v_type := 'NONE';
+        elsif v_diff > 0 then
+            v_type := 'IN';
+        else
+            v_type := 'OUT';
+        end if;
+
+        if v_diff <> 0 then
+            insert into public.stock_movements (
+                product_id,
+                organization_id,
+                type,
+                quantity,
+                source,
+                created_at
+            )
+            values (
+                v_product,
+                p_org,
+                v_type,
+                abs(v_diff),
+                'inventory',
+                p_inventory_date
+            );
+        end if;
+
+        insert into public.inventory_items (
+            inventory_id,
+            product_id,
+            product_name,
+            theoretical_stock,
+            real_stock,
+            difference,
+            movement_type,
+            unit_price,
+            total_price
+        )
+        select
+            v_inventory_id,
+            p.id,
+            p.name,
+            v_theoretical,
+            v_real_stock,
+            v_diff,
+            v_type,
+            v_unit_price,
+            v_unit_price * abs(v_diff)
+        from public.products p
+        where p.id = v_product;
+
+        v_total := v_total + (v_unit_price * abs(v_diff));
+
+        insert into public.final_stock (
+            product_id,
+            organization_id,
+            stock,
+            last_inventory_date
+        )
+        values (
+            v_product,
+            p_org,
+            v_real_stock,
+            p_inventory_date
+        )
         on conflict (product_id, organization_id)
-        do update set stock = excluded.stock, last_inventory_date = excluded.last_inventory_date;
+        do update set
+            stock = excluded.stock,
+            last_inventory_date = excluded.last_inventory_date;
+
     end loop;
+
+    update public.inventories
+    set total_value = v_total
+    where id = v_inventory_id;
+
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql;
