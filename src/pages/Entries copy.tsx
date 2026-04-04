@@ -5,6 +5,9 @@ import { supabase } from "../services/supabaseClient";
 import { useOrganization } from "../hooks/useOrganization";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { X, Search, Pencil, Trash2 } from "lucide-react";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 interface Product {
   id: string;
@@ -24,7 +27,7 @@ interface Entry {
   stock_after: number;
 }
 
-// Réutilisable pour suppression/modification
+// Modal confirmation générique
 function ConfirmModal({
   isOpen,
   type,
@@ -96,6 +99,9 @@ export default function Entries() {
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [searchText, setSearchText] = useState("");
 
+  const [filterProduct, setFilterProduct] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+
   const [formData, setFormData] = useState({
     product_id: "",
     quantity: 0,
@@ -103,11 +109,9 @@ export default function Entries() {
     date: new Date().toISOString().slice(0, 10),
   });
 
-  // Confirmation modal
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmType, setConfirmType] = useState<"delete" | "edit" | null>(null);
   const [selectedItem, setSelectedItem] = useState<Product | null>(null);
-
   const [currentStock, setCurrentStock] = useState(0);
 
   // FETCH PRODUCTS
@@ -161,14 +165,12 @@ export default function Entries() {
     setShowModal(true);
   };
 
-  // HANDLE DELETE AVEC MODAL
   const handleDelete = (entry: Entry) => {
     setSelectedItem({ id: entry.id, name: entry.product_name } as Product);
     setConfirmType("delete");
     setConfirmOpen(true);
   };
 
-  // CONFIRM MODAL FUNCTION
   const handleConfirm = async () => {
     if (!selectedItem || !organizationId || !confirmType) return;
 
@@ -241,6 +243,48 @@ export default function Entries() {
     if (organizationId) fetchEntries(organizationId);
   };
 
+  // FILTERED ENTRIES
+  const displayedEntries = entries.filter(e => {
+    const matchesProduct = filterProduct ? e.product_id === filterProduct : true;
+    const matchesDate = filterDate ? e.created_at.slice(0, 10) === filterDate : true;
+    return matchesProduct && matchesDate;
+  });
+
+  // EXPORT PDF
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    const tableData = displayedEntries.map(e => [
+      e.product_name,
+      new Date(e.created_at).toLocaleDateString(),
+      e.quantity,
+      e.unit_price,
+      e.quantity * e.unit_price,
+      e.stock_after
+    ]);
+    (doc as any).autoTable({
+      head: [["Produit", "Date", "Qté", "Prix", "Total", "Stock"]],
+      body: tableData,
+    });
+    doc.save("entrées.pdf");
+  };
+
+  // EXPORT EXCEL/CSV
+  const handleExportExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(
+      displayedEntries.map(e => ({
+        Produit: e.product_name,
+        Date: new Date(e.created_at).toLocaleDateString(),
+        Quantité: e.quantity,
+        Prix: e.unit_price,
+        Total: e.quantity * e.unit_price,
+        Stock: e.stock_after
+      }))
+    );
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Entrées");
+    XLSX.writeFile(workbook, "entrées.xlsx");
+  };
+
   if (loading) {
     return (
       <div className={dark ? "dark" : ""}>
@@ -253,108 +297,160 @@ export default function Entries() {
     <div className={dark ? "dark" : ""}>
       <Toaster />
 
-      <div className="min-h-screen w-full overflow-x-hidden p-3 sm:p-4 md:p-6 bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen p-4 md:p-6 bg-gray-100 dark:bg-gray-900 space-y-6">
 
         {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-bold">Entrées</h1>
-          <button
-            onClick={handleAdd}
-            className="bg-emerald-600 text-white px-4 py-2 rounded-xl w-full sm:w-auto"
-          >
-            + Nouvelle entrée
-          </button>
-        </div>
+        <div className="flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Entrées</h1>
+            <p className="text-sm text-gray-500">Gestion des entrées de stock</p>
+          </div>
 
-        {/* TABLE */}
-        <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow overflow-hidden">
-          <div className="w-full overflow-x-auto">
-            <table className="min-w-[700px] w-full">
-              <thead className="bg-gray-100 dark:bg-gray-800">
-                <tr>
-                  <th className="p-3 text-left">Produit</th>
-                  <th className="p-3 text-center">Date</th>
-                  <th className="p-3 text-center">Quantité</th>
-                  <th className="p-3 text-center">Prix</th>
-                  <th className="p-3 text-center">Total</th>
-                  <th className="p-3 text-center">Stock après</th>
-                  <th className="p-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map(entry => (
-                  <tr key={entry.id} className="border-b text-center">
-                    <td className="p-3">{entry.product_name}</td>
-                    <td className="p-3">{new Date(entry.created_at).toLocaleDateString()}</td>
-                    <td className="p-3 text-green-600 font-bold">+{entry.quantity}</td>
-                    <td className="p-3">{entry.unit_price}</td>
-                    <td className="p-3">{entry.unit_price * entry.quantity}</td>
-                    <td className="p-3">{entry.stock_after}</td>
-                    <td className="flex justify-center gap-2 p-2">
-                      <button onClick={() => handleEdit(entry)} className="p-2 bg-blue-500 text-white rounded-lg">
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(entry)}
-                        className="p-2 bg-red-600 text-white rounded-lg"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex gap-2 flex-wrap">
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleAdd}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl shadow"
+            >
+              + Nouvelle entrée
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleExportPDF}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl shadow"
+            >
+              Export PDF
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={handleExportExcel}
+              className="bg-yellow-500 hover:bg-yellow-400 text-white px-4 py-2 rounded-xl shadow"
+            >
+              Export Excel
+            </motion.button>
           </div>
         </div>
 
-        {/* MOBILE */}
-        <div className="md:hidden grid gap-3">
-          {entries.map(entry => (
-            <div key={entry.id} className="bg-white dark:bg-gray-900 p-4 rounded-xl shadow">
-              <div className="flex justify-between">
-                <span>{entry.product_name}</span>
-                <span className="text-green-600 font-bold">+{entry.quantity}</span>
-              </div>
-              <div className="text-sm text-gray-500">{entry.unit_price}</div>
-            </div>
-          ))}
+        {/* FILTRE PRODUIT & DATE */}
+        <div className="flex flex-col md:flex-row gap-3 items-start">
+          <input
+            type="text"
+            placeholder="Rechercher produit..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            className="p-3 rounded-xl border flex-1 dark:bg-gray-800"
+          />
+
+          <select
+            value={filterProduct}
+            onChange={e => setFilterProduct(e.target.value)}
+            className="p-3 rounded-xl border dark:bg-gray-800"
+          >
+            <option value="">Tous les produits</option>
+            {products.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            value={filterDate}
+            onChange={e => setFilterDate(e.target.value)}
+            className="p-3 rounded-xl border dark:bg-gray-800"
+          />
         </div>
 
-        {/* MODAL ENTRIES */}
+        {/* TABLEAU */}
+        <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl shadow-sm">
+          <table className="w-full">
+            <thead className="bg-gray-50 dark:bg-gray-700 text-sm">
+              <tr className="text-gray-600 dark:text-gray-300">
+                <th className="p-4 text-left">Produit</th>
+                <th className="p-4 text-center">Date</th>
+                <th className="p-4 text-center">Qté</th>
+                <th className="p-4 text-center">Prix</th>
+                <th className="p-4 text-center">Total</th>
+                <th className="p-4 text-center">Stock</th>
+                <th className="p-4 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayedEntries.map(entry => (
+                <motion.tr
+                  key={entry.id}
+                  whileHover={{ backgroundColor: "rgba(0,0,0,0.02)" }}
+                  className="border-t text-sm"
+                >
+                  <td className="p-4 font-medium">{entry.product_name}</td>
+                  <td className="p-4 text-center text-gray-500">{new Date(entry.created_at).toLocaleDateString()}</td>
+                  <td className="p-4 text-center text-emerald-600 font-bold">+{entry.quantity}</td>
+                  <td className="p-4 text-center">{entry.unit_price.toLocaleString()}</td>
+                  <td className="p-4 text-center font-semibold">{(entry.unit_price * entry.quantity).toLocaleString()}</td>
+                  <td className="p-4 text-center font-bold text-blue-600">{entry.stock_after}</td>
+                  <td className="p-4">
+                    <div className="flex justify-center gap-2">
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        onClick={() => handleEdit(entry)}
+                        className="p-2 bg-blue-500 text-white rounded-lg"
+                      >
+                        <Pencil size={16} />
+                      </motion.button>
+
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        onClick={() => handleDelete(entry)}
+                        className="p-2 bg-rose-600 text-white rounded-lg"
+                      >
+                        <Trash2 size={16} />
+                      </motion.button>
+                    </div>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* MODAL AJOUT/EDIT */}
         <AnimatePresence>
           {showModal && (
             <motion.div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50">
               <motion.div
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                className="bg-white dark:bg-gray-900 w-[95%] sm:w-full max-w-md rounded-2xl p-4 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl"
               >
-                <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-                  <div className="flex justify-between mb-2">
-                    <h2 className="font-bold text-lg">
-                      {editingEntry ? "Modifier entrée" : "Nouvelle entrée"}
-                    </h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="flex justify-between">
+                    <h2 className="font-bold text-lg">{editingEntry ? "Modifier" : "Nouvelle entrée"}</h2>
                     <X onClick={() => setShowModal(false)} className="cursor-pointer" />
                   </div>
 
+                  {/* SEARCH */}
                   <div className="relative">
                     <Search className="absolute left-3 top-3 text-gray-400" size={18} />
                     <input
                       value={searchText}
                       onChange={e => setSearchText(e.target.value)}
-                      placeholder="Produit"
-                      className="w-full pl-10 p-3 rounded-xl border dark:bg-gray-800"
+                      placeholder="Rechercher produit..."
+                      className="w-full pl-10 p-3 rounded-xl border focus:ring-2 focus:ring-emerald-500 dark:bg-gray-800"
                     />
                   </div>
 
+                  {/* RESULT */}
                   {searchText && (
                     <div className="bg-white dark:bg-gray-800 rounded-xl shadow max-h-40 overflow-auto">
                       {filteredProducts.map(p => (
                         <div
                           key={p.id}
                           onClick={() => handleSelectProduct(p)}
-                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                          className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
                         >
                           {p.name}
                         </div>
@@ -362,7 +458,10 @@ export default function Entries() {
                     </div>
                   )}
 
-                  <div className="text-sm">Stock: {currentStock}</div>
+                  {/* STOCK */}
+                  <div className="text-sm text-gray-500">
+                    Stock actuel: <b>{currentStock}</b>
+                  </div>
 
                   <input
                     type="number"
@@ -373,18 +472,29 @@ export default function Entries() {
                   />
 
                   <input
+                    type="number"
+                    value={formData.unit_price}
+                    onChange={e => setFormData({ ...formData, unit_price: Number(e.target.value) })}
+                    className="w-full p-3 rounded-xl border dark:bg-gray-800"
+                    placeholder="Prix unitaire"
+                  />
+
+                  <input
                     type="date"
                     value={formData.date}
                     onChange={e => setFormData({ ...formData, date: e.target.value })}
                     className="w-full p-3 rounded-xl border dark:bg-gray-800"
                   />
 
-                  <div className="text-sm">
-                    Après entrée: <b>{projectedStock}</b>
+                  <div className="text-right text-gray-700 dark:text-gray-300">
+                    Stock projeté: <b>{projectedStock}</b>
                   </div>
 
-                  <button className="w-full bg-emerald-600 text-white py-3 rounded-xl">
-                    Enregistrer
+                  <button
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl"
+                  >
+                    {editingEntry ? "Modifier" : "Ajouter"}
                   </button>
                 </form>
               </motion.div>
@@ -392,13 +502,13 @@ export default function Entries() {
           )}
         </AnimatePresence>
 
-        {/* MODAL CONFIRMATION */}
+        {/* CONFIRM MODAL */}
         <ConfirmModal
           isOpen={confirmOpen}
-          type={confirmType!}
-          itemName={selectedItem?.name}
+          type={confirmType as any}
           onCancel={() => setConfirmOpen(false)}
           onConfirm={handleConfirm}
+          itemName={selectedItem?.name}
         />
       </div>
     </div>

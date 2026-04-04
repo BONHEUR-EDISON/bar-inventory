@@ -22,7 +22,7 @@ interface Output {
 
 export default function Outputs() {
   const { organizationId } = useOrganization();
-    const { dark } = useDarkMode(); // juste pour appliquer les classes dark
+  const { dark } = useDarkMode();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [outputs, setOutputs] = useState<Output[]>([]);
@@ -108,7 +108,7 @@ export default function Outputs() {
     setFormData({
       ...formData,
       product_id: p.id,
-      unit_price: p.sale_price, // prix auto
+      unit_price: p.sale_price,
     });
     setSearch(p.name);
   };
@@ -154,150 +154,151 @@ export default function Outputs() {
   // ================= UI =================
   return (
     <div className={dark ? "dark" : ""}>
-      <div className="min-h-screen p-4 md:p-6 bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen w-full overflow-x-hidden p-3 sm:p-4 md:p-6 bg-gray-50 dark:bg-gray-900">
 
-      
-      <Toaster />
+        <Toaster />
 
-      <div className="flex justify-between mb-6">
-        <h1 className="text-2xl font-bold">Sorties</h1>
-        <button
-          onClick={() => {
-            setShowModal(true);
-            setTimeout(() => searchRef.current?.focus(), 200);
-          }}
-          className="bg-red-600 text-white px-4 py-2 rounded-xl"
-        >
-          + Nouvelle sortie
-        </button>
-      </div>
-
-      {/* TABLE */}
-      <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow">
-        <table className="w-full">
-          <thead className="bg-gray-100 dark:bg-gray-800">
-            <tr>
-              <th className="p-3">Produit</th>
-              <th className="p-3">Quantité</th>
-              <th className="p-3">Prix</th>
-              <th className="p-3">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {outputs.map((o) => (
-              <tr key={o.id} className="border-b text-center">
-                <td className="p-3">{o.product_name}</td>
-                <td className="p-3 text-red-600 font-bold">-{o.quantity}</td>
-                <td>{o.unit_price}</td>
-                <td className="text-xs text-gray-500">
-                  {new Date(o.created_at).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* MOBILE */}
-      <div className="md:hidden grid gap-4">
-        {outputs.map((o) => (
-          <div key={o.id} className="bg-white dark:bg-gray-900 p-4 rounded-xl shadow">
-            <div className="flex justify-between">
-              <span>{o.product_name}</span>
-              <span className="text-red-600 font-bold">-{o.quantity}</span>
-            </div>
-            <div className="text-sm text-gray-500">{o.unit_price}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* MODAL */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-bold">Sorties</h1>
+          <button
+            onClick={() => {
+              setShowModal(true);
+              setTimeout(() => searchRef.current?.focus(), 200);
+            }}
+            className="bg-red-600 text-white px-4 py-2 rounded-xl w-full sm:w-auto"
           >
-            <motion.form
-              onSubmit={handleSubmit}
-              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-2xl"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-            >
-              <div className="flex justify-between mb-4">
-                <h2 className="font-bold text-lg">Nouvelle sortie</h2>
-                <X onClick={() => setShowModal(false)} className="cursor-pointer" />
-              </div>
+            + Nouvelle sortie
+          </button>
+        </div>
 
-              {/* SEARCH PRODUCT */}
-              <div className="relative mb-3">
-                <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+        {/* TABLE DESKTOP */}
+        <div className="hidden md:block bg-white dark:bg-gray-900 rounded-xl shadow overflow-hidden">
+          <div className="w-full overflow-x-auto">
+            <table className="min-w-[600px] w-full">
+              <thead className="bg-gray-100 dark:bg-gray-800">
+                <tr>
+                  <th className="p-3 text-left whitespace-nowrap">Produit</th>
+                  <th className="p-3 text-center whitespace-nowrap">Quantité</th>
+                  <th className="p-3 text-center whitespace-nowrap">Prix</th>
+                  <th className="p-3 text-center whitespace-nowrap">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outputs.map((o) => (
+                  <tr key={o.id} className="border-b text-center">
+                    <td className="p-3 truncate max-w-[150px]">{o.product_name}</td>
+                    <td className="p-3 text-red-600 font-bold">-{o.quantity}</td>
+                    <td className="p-3">{o.unit_price}</td>
+                    <td className="text-xs text-gray-500 whitespace-nowrap">
+                      {new Date(o.created_at).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* MOBILE */}
+        <div className="md:hidden grid gap-3">
+          {outputs.map((o) => (
+            <div key={o.id} className="bg-white dark:bg-gray-900 p-4 rounded-xl shadow overflow-hidden">
+              <div className="flex justify-between gap-2">
+                <span className="truncate">{o.product_name}</span>
+                <span className="text-red-600 font-bold shrink-0">-{o.quantity}</span>
+              </div>
+              <div className="text-sm text-gray-500 truncate">{o.unit_price}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* MODAL */}
+        <AnimatePresence>
+          {showModal && (
+            <motion.div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.form
+                onSubmit={handleSubmit}
+                className="bg-white dark:bg-gray-900 w-[95%] sm:w-full max-w-md rounded-2xl p-4 sm:p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+                initial={{ scale: 0.9 }}
+                animate={{ scale: 1 }}
+              >
+                <div className="flex justify-between mb-4">
+                  <h2 className="font-bold text-lg">Nouvelle sortie</h2>
+                  <X onClick={() => setShowModal(false)} className="cursor-pointer" />
+                </div>
+
+                {/* SEARCH */}
+                <div className="relative mb-3">
+                  <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Rechercher produit..."
+                    className="w-full pl-10 p-3 rounded-xl border dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+
+                  {search && (
+                    <div className="absolute left-0 right-0 bg-white dark:bg-gray-800 mt-1 rounded-xl shadow max-h-40 overflow-y-auto z-20 border dark:border-gray-700">
+                      {filteredProducts.map((p) => (
+                        <div
+                          key={p.id}
+                          onClick={() => handleSelectProduct(p)}
+                          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                        >
+                          {p.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-sm mb-2">
+                  Stock: <b>{currentStock}</b>
+                </div>
+
                 <input
-                  ref={searchRef}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Rechercher produit..."
-                  className="w-full pl-10 p-3 rounded-xl border dark:bg-gray-800"
+                  type="number"
+                  placeholder="Stock restant"
+                  className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800 focus:ring-2 focus:ring-red-500"
+                  onChange={(e) =>
+                    setFormData({ ...formData, remaining_stock: Number(e.target.value) })
+                  }
                 />
 
-                {search && (
-                  <div className="absolute w-full bg-white dark:bg-gray-800 mt-1 rounded-xl shadow max-h-40 overflow-auto z-10">
-                    {filteredProducts.map((p) => (
-                      <div
-                        key={p.id}
-                        onClick={() => handleSelectProduct(p)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                      >
-                        {p.name}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                <div className="text-sm mb-3">
+                  Sortie: <b className="text-red-600">{sortie > 0 ? sortie : 0}</b>
+                </div>
 
-              {/* STOCK */}
-              <div className="text-sm mb-2">
-                Stock: <b>{currentStock}</b>
-              </div>
+                <input
+                  type="number"
+                  value={formData.unit_price}
+                  className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800 focus:ring-2 focus:ring-red-500"
+                  onChange={(e) =>
+                    setFormData({ ...formData, unit_price: Number(e.target.value) })
+                  }
+                />
 
-              <input
-                type="number"
-                placeholder="Stock restant"
-                className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
-                onChange={(e) =>
-                  setFormData({ ...formData, remaining_stock: Number(e.target.value) })
-                }
-              />
+                <input
+                  type="datetime-local"
+                  value={formData.date}
+                  className="w-full mb-4 p-3 rounded-xl border dark:bg-gray-800 focus:ring-2 focus:ring-red-500"
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                />
 
-              <div className="text-sm mb-3">
-                Sortie: <b className="text-red-600">{sortie > 0 ? sortie : 0}</b>
-              </div>
-
-              <input
-                type="number"
-                value={formData.unit_price}
-                className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
-                onChange={(e) =>
-                  setFormData({ ...formData, unit_price: Number(e.target.value) })
-                }
-              />
-
-              <input
-                type="datetime-local"
-                value={formData.date}
-                className="w-full mb-4 p-3 rounded-xl border dark:bg-gray-800"
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              />
-
-              <button className="w-full bg-red-600 text-white py-3 rounded-xl">
-                Enregistrer
-              </button>
-            </motion.form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <button className="w-full bg-red-600 text-white py-3 rounded-xl">
+                  Enregistrer
+                </button>
+              </motion.form>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
