@@ -7,12 +7,12 @@ import { useDarkMode } from "../hooks/useDarkMode";
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
-  const { darkMode } = useDarkMode();
+   const { dark = false } = useDarkMode(); // toujours défini
 
   const handleClose = () => setOpen(false);
 
   return (
-    <div className={`flex h-screen ${darkMode ? "bg-gray-900" : "bg-gray-50"}`}>
+    <div className={`flex h-screen ${dark ? "bg-gray-900" : "bg-gray-50"}`}>
       {/* Sidebar Desktop */}
       <div className="hidden md:block">
         <Sidebar close={undefined} /> {/* Desktop n'utilise pas close */}
