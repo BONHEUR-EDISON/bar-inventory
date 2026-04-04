@@ -1,0 +1,656 @@
+je veux changer la logique de sortie au lieu de mettre le le nombre sortie on met juste le nombre au'on a en stock et de la lui meme deduira du stock total ex stock tot 15 on entre stock actuel 7 automatiquement il deduit aue la sortie etait de 8 -- =========================
+-- EXTENSIONS
+-- =========================
+create extension if not exists "uuid-ossp";
+
+-- =========================
+-- ORGANIZATIONS
+-- =========================
+create table public.organizations (
+    id uuid primary key default uuid_generate_v4(),
+    name text not null,
+    created_by uuid references auth.users(id) on delete set null,
+    created_at timestamp default now()
+);
+
+-- =========================
+-- USER ↔ ORGANIZATION
+-- =========================
+create table public.user_organizations (
+    id uuid primary key default uuid_generate_v4(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    role text not null default 'member',
+    created_at timestamp default now(),
+    unique (user_id, organization_id)
+);
+
+-- =========================
+-- USER SETTINGS
+-- =========================
+create table public.user_settings (
+    id uuid primary key default uuid_generate_v4(),
+    user_id uuid unique references auth.users(id) on delete cascade,
+    theme text default 'light',
+    created_at timestamp default now()
+);
+
+-- =========================
+-- PRODUCTS
+-- =========================
+create table public.products (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    name text not null,
+    initial_stock numeric default 0,
+    purchase_price numeric default 0,
+    sale_price numeric default 0,
+    created_at timestamp default now()
+);
+
+-- =========================
+-- ENTRIES
+-- =========================
+create table public.entries (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    product_id uuid references public.products(id) on delete cascade,
+    quantity numeric not null,
+    unit_price numeric not null,
+    date date not null default now(),
+    created_at timestamp default now()
+);
+
+-- =========================
+-- OUTPUTS
+-- =========================
+create table public.outputs (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    product_id uuid references public.products(id) on delete cascade,
+    quantity numeric not null,
+    unit_price numeric not null,
+    total numeric generated always as (quantity * unit_price) stored,
+    date date not null default now(),
+    created_at timestamp default now()
+);
+
+-- =========================
+-- EXPENSES
+-- =========================
+create table public.expenses (
+    id uuid primary key default uuid_generate_v4(),
+    organization_id uuid not null references public.organizations(id) on delete cascade,
+    label text not null,
+    amount numeric not null,
+    date date not null default now(),
+    created_at timestamp default now()
+);
+
+-- =========================
+-- FINAL STOCK
+-- =========================
+create table public.final_stock (
+    id uuid primary key default uuid_generate_v4(),
+    product_id uuid references public.products(id) on delete cascade,
+    organization_id uuid references public.organizations(id) on delete cascade,
+    stock numeric not null,
+    last_inventory_date date not null,
+    created_at timestamp default now(),
+    unique(product_id, organization_id)
+);
+
+-- =========================
+-- INDEXES
+-- =========================
+create index idx_products_org on products(organization_id);
+create index idx_entries_org on entries(organization_id);
+create index idx_outputs_org on outputs(organization_id);
+create index idx_expenses_org on expenses(organization_id);
+
+-- =========================
+-- ENABLE RLS
+-- =========================
+alter table organizations enable row level security;
+alter table user_organizations enable row level security;
+alter table user_settings enable row level security;
+alter table products enable row level security;
+alter table entries enable row level security;
+alter table outputs enable row level security;
+alter table expenses enable row level security;
+alter table final_stock enable row level security;
+
+-- =========================
+-- POLICIES
+-- =========================
+-- ORGANIZATIONS
+create policy "org_select"
+on organizations for select
+using (id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+-- USER ORG
+create policy "membership_select"
+on user_organizations for select
+using (user_id = auth.uid());
+
+-- SETTINGS
+create policy "settings_access"
+on user_settings for all
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+-- GENERIC ORG ACCESS
+create policy "products_access"
+on products for all
+using (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+))
+with check (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+create policy "entries_access"
+on entries for all
+using (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+))
+with check (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+create policy "outputs_access"
+on outputs for all
+using (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+))
+with check (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+create policy "expenses_access"
+on expenses for all
+using (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+))
+with check (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+create policy "final_stock_access"
+on final_stock for all
+using (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+))
+with check (organization_id in (
+  select organization_id from user_organizations where user_id = auth.uid()
+));
+
+-- =========================
+-- AUTO CREATE USER ORG
+-- =========================
+create or replace function public.handle_new_user()
+returns trigger as $$ 
+declare
+    org_id uuid;
+begin
+    insert into public.organizations (name, created_by)
+    values ('My Organization', new.id)
+    returning id into org_id;
+
+    insert into public.user_organizations (user_id, organization_id, role)
+    values (new.id, org_id, 'owner');
+
+    insert into public.user_settings (user_id)
+    values (new.id);
+
+    return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute procedure public.handle_new_user();
+
+-- =========================
+-- PREVENT NEGATIVE STOCK
+-- =========================
+create or replace function prevent_negative_stock()
+returns trigger as $$ 
+declare
+  current_stock numeric;
+begin
+  select stock into current_stock
+  from final_stock
+  where product_id = new.product_id
+    and organization_id = new.organization_id
+  order by last_inventory_date desc
+  limit 1;
+
+  if current_stock is null then
+      select initial_stock into current_stock
+      from products
+      where id = new.product_id;
+  end if;
+
+  if current_stock < new.quantity then
+    raise exception 'Stock insuffisant';
+  end if;
+
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger trg_prevent_negative_stock
+before insert on outputs
+for each row
+execute function prevent_negative_stock();
+
+-- =========================
+-- FONCTION INVENTAIRE (CALCUL FINAL STOCK)
+-- =========================
+create or replace function calculate_inventory(
+    p_org_id uuid,
+    p_date_start date,
+    p_date_end date
+)
+returns void as $$ 
+declare
+    prod record;
+    v_stock_initial numeric;
+    v_entries numeric;
+    v_outputs numeric;
+    v_final numeric;
+begin
+
+for prod in
+    select * from products where organization_id = p_org_id
+loop
+
+    -- 1️⃣ STOCK INITIAL (depuis final_stock ou produit initial)
+    select stock into v_stock_initial
+    from final_stock
+    where product_id = prod.id
+      and organization_id = p_org_id
+    order by last_inventory_date desc
+    limit 1;
+
+    if v_stock_initial is null then
+        v_stock_initial := coalesce(prod.initial_stock, 0);
+    end if;
+
+    -- 2️⃣ TOTAL ENTRIES
+    select coalesce(sum(quantity),0) into v_entries
+    from entries
+    where product_id = prod.id
+      and organization_id = p_org_id
+      and date between p_date_start and p_date_end;
+
+    -- 3️⃣ TOTAL OUTPUTS
+    select coalesce(sum(quantity),0) into v_outputs
+    from outputs
+    where product_id = prod.id
+      and organization_id = p_org_id
+      and date between p_date_start and p_date_end;
+
+    -- 4️⃣ CALCUL FINAL
+    v_final := v_stock_initial + v_entries - v_outputs;
+
+    -- 5️⃣ UPSERT FINAL STOCK
+    insert into final_stock (
+        product_id,
+        organization_id,
+        stock,
+        last_inventory_date
+    )
+    values (
+        prod.id,
+        p_org_id,
+        v_final,
+        p_date_end
+    )
+    on conflict (product_id, organization_id)
+    do update set
+        stock = excluded.stock,
+        last_inventory_date = excluded.last_inventory_date;
+
+end loop;
+
+end;
+$$ language plpgsql; import { useEffect, useState } from "react";
+import { supabase } from "../services/supabaseClient";
+
+interface Product {
+  id: string;
+  name: string;
+  sale_price: number;
+  final_stock: number;
+  organization_id: string;
+}
+
+interface Output {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  date: string;
+}
+
+export default function Outputs() {
+  const [outputs, setOutputs] = useState<Output[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [showModal, setShowModal] = useState(false);
+  const [editingOutput, setEditingOutput] = useState<Output | null>(null);
+
+  const [formData, setFormData] = useState({
+    product_id: "",
+    quantity: 0,
+    unit_price: 0,
+    date: new Date().toISOString().slice(0, 10),
+  });
+
+  const [searchText, setSearchText] = useState("");
+
+  // 🔥 GET ORGANIZATION
+  const getOrganization = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return null;
+
+    const { data } = await supabase
+      .from("user_organizations")
+      .select("organization_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    return data?.organization_id || null;
+  };
+
+  // 🔥 FETCH PRODUCTS
+  const fetchProducts = async (orgId: string) => {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("organization_id", orgId);
+
+    if (error) console.error(error);
+    else setProducts(data || []);
+  };
+
+  // 🔥 FETCH OUTPUTS
+  const fetchOutputs = async (orgId: string) => {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("outputs")
+      .select("*, products(name)")
+      .eq("organization_id", orgId)
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.error(error);
+    } else {
+      const formatted = data?.map((item: any) => ({
+        ...item,
+        product_name: item.products?.name || "Produit inconnu",
+      }));
+
+      setOutputs(formatted || []);
+    }
+
+    setLoading(false);
+  };
+
+  // 🔥 INIT
+  useEffect(() => {
+    const init = async () => {
+      const org = await getOrganization();
+
+      if (!org) {
+        console.warn("Aucune organisation");
+        return;
+      }
+
+      setOrgId(org);
+
+      await Promise.all([fetchProducts(org), fetchOutputs(org)]);
+    };
+
+    init();
+  }, []);
+
+  // 🔥 ADD / EDIT
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    if (!formData.product_id || !orgId) {
+      alert("Produit requis");
+      return;
+    }
+
+    try {
+      if (editingOutput) {
+        // UPDATE
+        const { error } = await supabase
+          .from("outputs")
+          .update(formData)
+          .eq("id", editingOutput.id);
+
+        if (error) throw error;
+      } else {
+        // INSERT
+        const { error } = await supabase.from("outputs").insert([
+          {
+            ...formData,
+            organization_id: orgId,
+          },
+        ]);
+
+        if (error) throw error;
+
+        // 🔥 UPDATE STOCK
+        const { data: product } = await supabase
+          .from("products")
+          .select("final_stock")
+          .eq("id", formData.product_id)
+          .single();
+
+        if (product) {
+          const newStock = (product.final_stock || 0) - formData.quantity;
+
+          if (newStock < 0) {
+            alert("Stock insuffisant !");
+            return;
+          }
+
+          const { error: stockError } = await supabase
+            .from("products")
+            .update({ final_stock: newStock })
+            .eq("id", formData.product_id);
+
+          if (stockError) throw stockError;
+        }
+      }
+
+      setShowModal(false);
+      fetchOutputs(orgId);
+    } catch (err) {
+      console.error("Erreur:", err);
+    }
+  };
+
+  // 🔥 DELETE
+  const handleDelete = async (id: string) => {
+    if (!confirm("Supprimer cette sortie ?")) return;
+
+    const { error } = await supabase.from("outputs").delete().eq("id", id);
+
+    if (error) console.error(error);
+    else fetchOutputs(orgId!);
+  };
+
+  const handleEdit = (o: Output) => {
+    setEditingOutput(o);
+    setFormData({
+      product_id: o.product_id,
+      quantity: o.quantity,
+      unit_price: o.unit_price,
+      date: o.date,
+    });
+    setSearchText(o.product_name);
+    setShowModal(true);
+  };
+
+  const handleAdd = () => {
+    setEditingOutput(null);
+    setFormData({
+      product_id: "",
+      quantity: 0,
+      unit_price: 0,
+      date: new Date().toISOString().slice(0, 10),
+    });
+    setSearchText("");
+    setShowModal(true);
+  };
+
+  const handleSelectProduct = (p: Product) => {
+    setFormData({
+      ...formData,
+      product_id: p.id,
+      unit_price: p.sale_price,
+    });
+    setSearchText(p.name);
+  };
+
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  // UI
+  if (loading) return <div className="text-center mt-10">Chargement...</div>;
+
+  return (
+    <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          Sorties
+        </h1>
+
+        <button
+          onClick={handleAdd}
+          className="bg-red-600 text-white px-4 py-2 rounded-lg"
+        >
+          Ajouter
+        </button>
+      </div>
+
+      {/* LIST */}
+      <div className="space-y-3">
+        {outputs.map((o) => (
+          <div
+            key={o.id}
+            className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow flex justify-between"
+          >
+            <div>
+              <div className="font-bold">{o.product_name}</div>
+              <div className="text-sm text-gray-500">
+                {o.quantity} × {o.unit_price}
+              </div>
+            </div>
+
+            <div className="space-x-2">
+              <button
+                onClick={() => handleEdit(o)}
+                className="bg-yellow-500 text-white px-2 py-1 rounded"
+              >
+                Modifier
+              </button>
+              <button
+                onClick={() => handleDelete(o.id)}
+                className="bg-red-500 text-white px-2 py-1 rounded"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* MODAL */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md space-y-4"
+          >
+            <h2 className="font-bold text-lg text-gray-900 dark:text-white">
+              {editingOutput ? "Modifier" : "Ajouter"}
+            </h2>
+
+            <input
+              placeholder="Rechercher produit"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="w-full border p-2 rounded"
+            />
+
+            {filteredProducts.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => handleSelectProduct(p)}
+                className="cursor-pointer hover:bg-gray-200 p-2"
+              >
+                {p.name} (stock: {p.final_stock})
+              </div>
+            ))}
+
+            <input
+              type="number"
+              placeholder="Quantité"
+              value={formData.quantity}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  quantity: Number(e.target.value),
+                })
+              }
+              className="w-full border p-2 rounded"
+            />
+
+            <input
+              type="date"
+              value={formData.date}
+              onChange={(e) =>
+                setFormData({ ...formData, date: e.target.value })
+              }
+              className="w-full border p-2 rounded"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="px-4 py-2 bg-gray-400 rounded"
+              >
+                Annuler
+              </button>
+              <button className="px-4 py-2 bg-red-600 text-white rounded">
+                Valider
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}

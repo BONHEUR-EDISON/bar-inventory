@@ -25,7 +25,7 @@ interface Entry {
 
 export default function Entries() {
   const { organizationId } = useOrganization();
-  const { darkMode, toggleDarkMode } = useDarkMode();
+  const { dark = false } = useDarkMode(); // toujours défini
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -33,15 +33,17 @@ export default function Entries() {
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [searchText, setSearchText] = useState("");
+
   const [formData, setFormData] = useState({
     product_id: "",
     quantity: 0,
     unit_price: 0,
     date: new Date().toISOString().slice(0, 10),
   });
+
   const [currentStock, setCurrentStock] = useState(0);
 
-  // FETCH DATA
+  // FETCH PRODUCTS
   const fetchProducts = async (orgId: string) => {
     const { data, error } = await supabase
       .from("products")
@@ -52,6 +54,7 @@ export default function Entries() {
     setProducts(data || []);
   };
 
+  // FETCH ENTRIES
   const fetchEntries = async (orgId: string) => {
     setLoading(true);
     const { data, error } = await supabase.rpc("get_entries_with_stock", { p_org: orgId });
@@ -64,13 +67,14 @@ export default function Entries() {
     setLoading(false);
   };
 
+  // FETCH INIT
   useEffect(() => {
     if (!organizationId) return;
     fetchProducts(organizationId);
     fetchEntries(organizationId);
   }, [organizationId]);
 
-  // MODAL
+  // MODAL & FORM HANDLERS
   const handleAdd = () => {
     setEditingEntry(null);
     setFormData({ product_id: "", quantity: 0, unit_price: 0, date: new Date().toISOString().slice(0, 10) });
@@ -81,7 +85,12 @@ export default function Entries() {
 
   const handleEdit = (entry: Entry) => {
     setEditingEntry(entry);
-    setFormData({ product_id: entry.product_id, quantity: entry.quantity, unit_price: entry.unit_price, date: entry.created_at.slice(0, 10) });
+    setFormData({
+      product_id: entry.product_id,
+      quantity: entry.quantity,
+      unit_price: entry.unit_price,
+      date: entry.created_at.slice(0, 10),
+    });
     setSearchText(entry.product_name);
     setCurrentStock(entry.stock_before);
     setShowModal(true);
@@ -93,31 +102,43 @@ export default function Entries() {
     const { error } = await supabase.from("stock_movements").delete().eq("id", id);
     if (error) return toast.error("Erreur suppression");
     toast.success("Entrée supprimée");
-    fetchEntries(organizationId);
+    if (organizationId) fetchEntries(organizationId);
   };
 
   // PRODUCT SEARCH
-  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchText.toLowerCase().trim()));
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchText.toLowerCase().trim())
+  );
 
   const handleSelectProduct = (product: Product) => {
     setFormData(prev => ({ ...prev, product_id: product.id, unit_price: product.purchase_price }));
     const entry = entries
       .filter(e => e.product_id === product.id)
-      .sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
     setCurrentStock(entry ? entry.stock_after : 0);
     setSearchText(product.name);
   };
 
-  const projectedStock = formData.product_id && formData.quantity ? currentStock + formData.quantity : currentStock;
+  const projectedStock =
+    formData.product_id && formData.quantity
+      ? currentStock + formData.quantity
+      : currentStock;
 
   // SUBMIT
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!organizationId) return toast.error("Organisation non chargée");
     if (!formData.product_id) return toast.error("Sélectionnez un produit");
     if (formData.quantity <= 0) return toast.error("Quantité invalide");
 
-    const payload = { product_id: formData.product_id, organization_id: organizationId, type: "IN", quantity: formData.quantity, unit_price: formData.unit_price, source: "purchase", created_at: `${formData.date}T12:00:00.000Z` };
+    const payload = {
+      product_id: formData.product_id,
+      organization_id: organizationId,
+      type: "IN",
+      quantity: formData.quantity,
+      unit_price: formData.unit_price,
+      source: "purchase",
+      created_at: `${formData.date}T12:00:00.000Z`,
+    };
 
     let error;
     if (editingEntry) {
@@ -131,25 +152,36 @@ export default function Entries() {
     if (error) return toast.error("Erreur enregistrement");
     toast.success(editingEntry ? "Entrée modifiée" : "Entrée ajoutée");
     setShowModal(false);
-    fetchEntries(organizationId);
+    if (organizationId) fetchEntries(organizationId);
   };
 
-  if (loading) return <div className={darkMode ? "dark" : ""}><div className="min-h-screen flex items-center justify-center">Chargement...</div></div>;
+  // LOADING
+  if (loading) {
+    return (
+      <div className={dark ? "dark" : ""}>
+        <div className="min-h-screen flex items-center justify-center">Chargement...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className={darkMode ? "dark" : ""}>
+    <div className={dark ? "dark" : ""}>
       <Toaster position="top-right" />
       <div className="min-h-screen p-4 md:p-6 bg-gray-50 dark:bg-gray-900">
         {/* HEADER */}
         <div className="flex justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">📥 Entrées</h1>
           <div className="flex gap-2">
-            <button onClick={toggleDarkMode} className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700">{darkMode ? "☀️" : "🌙"}</button>
-            <button onClick={handleAdd} className="px-3 py-1 rounded bg-emerald-600 text-white">+ Nouvelle entrée</button>
+            <button
+              onClick={handleAdd}
+              className="px-3 py-1 rounded bg-emerald-600 text-white"
+            >
+              + Nouvelle entrée
+            </button>
           </div>
         </div>
 
-        {/* TABLEAU POUR DESKTOP */}
+        {/* TABLEAU DESKTOP */}
         <div className="overflow-x-auto rounded-xl shadow bg-white dark:bg-gray-800 hidden md:block">
           <table className="w-full text-left">
             <thead className="bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
@@ -173,8 +205,18 @@ export default function Entries() {
                   <td className="px-4 py-2">{entry.unit_price * entry.quantity}</td>
                   <td className="px-4 py-2">{entry.stock_after}</td>
                   <td className="px-4 py-2 flex gap-2">
-                    <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-amber-500 text-white rounded">Edit</button>
-                    <button onClick={() => handleDelete(entry.id)} className="px-2 py-1 bg-rose-500 text-white rounded">Delete</button>
+                    <button
+                      onClick={() => handleEdit(entry)}
+                      className="px-2 py-1 bg-amber-500 text-white rounded"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(entry.id)}
+                      className="px-2 py-1 bg-rose-500 text-white rounded"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -182,15 +224,32 @@ export default function Entries() {
           </table>
         </div>
 
-        {/* CARTES POUR MOBILE */}
+        {/* CARTES MOBILE */}
         <div className="md:hidden space-y-4">
           {entries.map(entry => (
-            <motion.div key={entry.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow border border-gray-100 dark:border-gray-700">
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow border border-gray-100 dark:border-gray-700"
+            >
               <div className="flex justify-between items-center mb-2">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{entry.product_name}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {entry.product_name}
+                </h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEdit(entry)} className="px-2 py-1 bg-amber-500 text-white rounded text-sm">Edit</button>
-                  <button onClick={() => handleDelete(entry.id)} className="px-2 py-1 bg-rose-500 text-white rounded text-sm">Delete</button>
+                  <button
+                    onClick={() => handleEdit(entry)}
+                    className="px-2 py-1 bg-amber-500 text-white rounded text-sm"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(entry.id)}
+                    className="px-2 py-1 bg-rose-500 text-white rounded text-sm"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-gray-700 dark:text-gray-300 text-sm">
@@ -207,23 +266,52 @@ export default function Entries() {
         {/* MODAL */}
         {showModal && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/30 z-50">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md">
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md"
+            >
               <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-                <input value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Produit" className="border p-2 rounded" />
+                <input
+                  value={searchText}
+                  onChange={e => setSearchText(e.target.value)}
+                  placeholder="Produit"
+                  className="border p-2 rounded"
+                />
                 {filteredProducts.map(p => (
-                  <button key={p.id} type="button" className="text-left p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded" onClick={() => handleSelectProduct(p)}>
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="text-left p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
+                    onClick={() => handleSelectProduct(p)}
+                  >
                     {p.name}
                   </button>
                 ))}
-                <input type="number" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })} className="border p-2 rounded" placeholder="Quantité" />
-                <input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} className="border p-2 rounded" />
-                <div>Stock actuel: {currentStock} <br />Après entrée: {projectedStock}</div>
-                <button type="submit" className="bg-blue-500 text-white p-2 rounded mt-2">Enregistrer</button>
+                <input
+                  type="number"
+                  value={formData.quantity}
+                  onChange={e => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                  className="border p-2 rounded"
+                  placeholder="Quantité"
+                />
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  className="border p-2 rounded"
+                />
+                <div>
+                  Stock actuel: {currentStock} <br />
+                  Après entrée: {projectedStock}
+                </div>
+                <button type="submit" className="bg-blue-500 text-white p-2 rounded mt-2">
+                  Enregistrer
+                </button>
               </form>
             </motion.div>
           </div>
         )}
-
       </div>
     </div>
   );

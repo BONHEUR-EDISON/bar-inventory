@@ -4,6 +4,7 @@ import { useOrganization } from "../hooks/useOrganization";
 import toast, { Toaster } from "react-hot-toast";
 import { X, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useDarkMode } from "../hooks/useDarkMode";
 
 interface Product {
   id: string;
@@ -21,6 +22,7 @@ interface Output {
 
 export default function Outputs() {
   const { organizationId } = useOrganization();
+    const { dark } = useDarkMode(); // juste pour appliquer les classes dark
 
   const [products, setProducts] = useState<Product[]>([]);
   const [outputs, setOutputs] = useState<Output[]>([]);
@@ -29,8 +31,6 @@ export default function Outputs() {
 
   const [search, setSearch] = useState("");
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -105,11 +105,10 @@ export default function Outputs() {
   }, [search, products]);
 
   const handleSelectProduct = (p: Product) => {
-    setSelectedProduct(p);
     setFormData({
       ...formData,
       product_id: p.id,
-      unit_price: p.sale_price, // 🔥 auto prix
+      unit_price: p.sale_price, // prix auto
     });
     setSearch(p.name);
   };
@@ -135,7 +134,12 @@ export default function Outputs() {
 
       setShowModal(false);
       setSearch("");
-      setSelectedProduct(null);
+      setFormData({
+        product_id: "",
+        remaining_stock: 0,
+        unit_price: 0,
+        date: new Date().toISOString().slice(0, 16),
+      });
 
       fetchOutputs();
       fetchStocks();
@@ -149,7 +153,10 @@ export default function Outputs() {
 
   // ================= UI =================
   return (
-    <div className="p-4 md:p-6">
+    <div className={dark ? "dark" : ""}>
+      <div className="min-h-screen p-4 md:p-6 bg-gray-50 dark:bg-gray-900">
+
+      
       <Toaster />
 
       <div className="flex justify-between mb-6">
@@ -180,9 +187,7 @@ export default function Outputs() {
             {outputs.map((o) => (
               <tr key={o.id} className="border-b text-center">
                 <td className="p-3">{o.product_name}</td>
-                <td className="p-3 text-red-600 font-bold">
-                  -{o.quantity}
-                </td>
+                <td className="p-3 text-red-600 font-bold">-{o.quantity}</td>
                 <td>{o.unit_price}</td>
                 <td className="text-xs text-gray-500">
                   {new Date(o.created_at).toLocaleString()}
@@ -206,7 +211,7 @@ export default function Outputs() {
         ))}
       </div>
 
-      {/* MODAL PREMIUM */}
+      {/* MODAL */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -262,10 +267,7 @@ export default function Outputs() {
                 placeholder="Stock restant"
                 className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    remaining_stock: Number(e.target.value),
-                  })
+                  setFormData({ ...formData, remaining_stock: Number(e.target.value) })
                 }
               />
 
@@ -278,10 +280,7 @@ export default function Outputs() {
                 value={formData.unit_price}
                 className="w-full mb-3 p-3 rounded-xl border dark:bg-gray-800"
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    unit_price: Number(e.target.value),
-                  })
+                  setFormData({ ...formData, unit_price: Number(e.target.value) })
                 }
               />
 
@@ -289,9 +288,7 @@ export default function Outputs() {
                 type="datetime-local"
                 value={formData.date}
                 className="w-full mb-4 p-3 rounded-xl border dark:bg-gray-800"
-                onChange={(e) =>
-                  setFormData({ ...formData, date: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
               />
 
               <button className="w-full bg-red-600 text-white py-3 rounded-xl">
@@ -301,6 +298,7 @@ export default function Outputs() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 import { useNavigate } from "react-router-dom";
@@ -29,14 +30,14 @@ type TopProduct = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { darkMode, toggleDarkMode } = useDarkMode();
+  const { dark } = useDarkMode(); // juste récupérer dark pour appliquer les classes
 
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({ products: 0, sales: 0, entries: 0, revenue: 0, profit: 0 });
   const [activities, setActivities] = useState<Activity[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<{ date: string; revenue: number }[]>([]);
 
   const getUserOrganization = async (userId: string) => {
     const { data, error } = await supabase
@@ -63,32 +64,23 @@ export default function Dashboard() {
         }
         setOrgId(organizationId);
 
-        // 🔹 Dates pour filtrer chart
         const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 30); // 30 derniers jours
+        startDate.setDate(startDate.getDate() - 30);
 
-        // 🔹 Fetch products
         const productsRes = await supabase
           .from("products")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", organizationId);
 
-        // 🔹 Fetch stock movements
         const movementsRes = await supabase
           .from("stock_movements")
           .select("*")
           .eq("organization_id", organizationId)
           .order("created_at", { ascending: true });
 
-        // 🔹 Sécuriser fetch ventes / sorties
-        const sales = movementsRes.data?.filter(
-          (m: any) => m.type === "OUT" && new Date(m.created_at) >= startDate
-        ) || [];
-
-        // 🔹 Sécuriser fetch entrées
+        const sales = movementsRes.data?.filter((m: any) => m.type === "OUT" && new Date(m.created_at) >= startDate) || [];
         const entries = movementsRes.data?.filter((m: any) => m.type === "IN") || [];
 
-        // 🔹 Calculs
         const revenue = sales.reduce((sum: number, s: any) => sum + (s.price || 0), 0);
         const cost = sales.reduce((sum: number, s: any) => sum + (s.unit_price || 0), 0);
         const profit = revenue - cost;
@@ -101,7 +93,6 @@ export default function Dashboard() {
           profit,
         });
 
-        // 🔹 Activité récente
         const recent: Activity[] = movementsRes.data
           ?.slice(-10)
           .reverse()
@@ -112,16 +103,15 @@ export default function Dashboard() {
           })) || [];
         setActivities(recent);
 
-        // 🔹 Top produits
         const topMap: Record<string, TopProduct> = {};
         sales.forEach((s: any) => {
-          if (!topMap[s.product_id]) topMap[s.product_id] = { id: s.product_id, name: s.product_id, sold: 0, revenue: 0 };
+          if (!topMap[s.product_id])
+            topMap[s.product_id] = { id: s.product_id, name: s.product_id, sold: 0, revenue: 0 };
           topMap[s.product_id].sold += 1;
           topMap[s.product_id].revenue += s.price || 0;
         });
         setTopProducts(Object.values(topMap).sort((a, b) => b.revenue - a.revenue).slice(0, 5));
 
-        // 🔹 Chart
         const dateMap: Record<string, number> = {};
         sales.forEach((s: any) => {
           const dateKey = new Date(s.created_at).toLocaleDateString();
@@ -141,7 +131,7 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className={darkMode ? "dark" : ""}>
+      <div className={dark ? "dark" : ""}>
         <div className="flex items-center justify-center h-screen text-gray-500 dark:text-gray-300">
           Chargement du dashboard...
         </div>
@@ -150,21 +140,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={darkMode ? "dark" : ""}>
+    <div className={dark ? "dark" : ""}>
       <Toaster position="top-right" />
       <div className="min-h-screen p-4 md:p-6 bg-gray-50 dark:bg-gray-900 transition-colors">
         {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">📊 Dashboard</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 dark:text-gray-400">Organisation: {orgId}</span>
-            <button
-              onClick={toggleDarkMode}
-              className="px-4 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 shadow-sm hover:shadow transition"
-            >
-              {darkMode ? "☀️ Clair" : "🌙 Sombre"}
-            </button>
-          </div>
+          <span className="text-sm text-gray-500 dark:text-gray-400">Organisation: {orgId}</span>
         </div>
 
         {/* STATS CARDS */}
@@ -187,9 +169,9 @@ export default function Dashboard() {
             ) : (
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? "#444" : "#e0e0e0"} />
-                  <XAxis dataKey="date" stroke={darkMode ? "#ccc" : "#666"} />
-                  <YAxis stroke={darkMode ? "#ccc" : "#666"} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={dark ? "#444" : "#e0e0e0"} />
+                  <XAxis dataKey="date" stroke={dark ? "#ccc" : "#666"} />
+                  <YAxis stroke={dark ? "#ccc" : "#666"} />
                   <Tooltip />
                   <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={3} />
                 </LineChart>
