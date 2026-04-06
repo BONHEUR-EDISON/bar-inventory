@@ -1,5 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./components/Layout";
 
 import Dashboard from "./pages/Dashboard";
@@ -12,47 +11,23 @@ import InventoryHistory from "./pages/InventoryHistory";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAutoLogout } from "./hooks/useAutoLogout";
+import InstallPWA from "./components/InstallPWA";
+import UpdatePWA from "./components/UpdatePWA";
 
 export default function App() {
   useAutoLogout();
-  const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
-
-  // Prompt pour mise à jour SW
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload());
-      navigator.serviceWorker.register('/sw.js').then((reg) => {
-        if (reg.waiting) setWaitingWorker(reg.waiting);
-
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          newWorker?.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              setWaitingWorker(newWorker);
-            }
-          });
-        });
-      });
-    }
-  }, []);
-
-  const handleUpdate = () => {
-    waitingWorker?.postMessage({ type: 'SKIP_WAITING' });
-  };
 
   return (
     <BrowserRouter>
-      {/* Bouton mise à jour SW */}
-      {waitingWorker && (
-        <div style={{ position: "fixed", bottom: 10, right: 10, background: "#4f46e5", color: "#fff", padding: "1rem", borderRadius: "0.5rem", zIndex: 9999 }}>
-          <span>Nouvelle version disponible ! </span>
-          <button onClick={handleUpdate} style={{ marginLeft: 10, background: "#fff", color: "#4f46e5", padding: "0.3rem 0.6rem", borderRadius: 4 }}>Mettre à jour</button>
-        </div>
-      )}
+      <InstallPWA />
+      <UpdatePWA />
 
       <Routes>
+        {/* ✅ Route par défaut */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         {/* Page publique */}
-        <Route path="login" element={<Login />} />
+        <Route path="/login" element={<Login />} />
 
         {/* Routes protégées */}
         <Route
@@ -62,17 +37,17 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="products" element={<Products />} />
-          <Route path="entries" element={<Entries />} />
-          <Route path="outputs" element={<Outputs />} />
-          <Route path="expenses" element={<Expenses />} />
-          <Route path="inventory" element={<Inventory />} />
-          <Route path="InventoryHistory" element={<InventoryHistory />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/entries" element={<Entries />} />
+          <Route path="/outputs" element={<Outputs />} />
+          <Route path="/expenses" element={<Expenses />} />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/inventory-history" element={<InventoryHistory />} />
         </Route>
 
         {/* Fallback */}
-        <Route path="*" element={<div>Page non trouvée</div>} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );
