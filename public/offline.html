@@ -150,20 +150,20 @@
 
   <script>
     function retry() {
-      window.location.assign("/login");
+      window.location.assign("/");
     }
 
     // Redirection automatique dès que la connexion revient
     window.addEventListener('online', () => {
-      window.location.assign("/login");
+      window.location.assign("/");
     });
 
-    // Vérification périodique de la page /login
+    // Vérification périodique de la page /
     setInterval(async () => {
       if (navigator.onLine) {
         try {
           const response = await fetch('/login', { method: 'HEAD' });
-          if (response.ok) window.location.assign("/login");
+          if (response.ok) window.location.assign("/");
         } catch (err) {
           // Toujours hors ligne
         }
