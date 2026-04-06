@@ -148,15 +148,27 @@
     <button class="retry-button" onclick="retry()">Réessayer</button>
   </div>
 
- <script>
-  function retry() {
-    // Redirection fiable vers /login
-    window.location.assign("/login");
-  }
+  <script>
+    function retry() {
+      window.location.assign("/login");
+    }
 
-  window.addEventListener('online', () => {
-    window.location.assign("/login");
-  });
-</script>
+    // Redirection automatique dès que la connexion revient
+    window.addEventListener('online', () => {
+      window.location.assign("/login");
+    });
+
+    // Vérification périodique de la page /login
+    setInterval(async () => {
+      if (navigator.onLine) {
+        try {
+          const response = await fetch('/login', { method: 'HEAD' });
+          if (response.ok) window.location.assign("/login");
+        } catch (err) {
+          // Toujours hors ligne
+        }
+      }
+    }, 5000);
+  </script>
 </body>
 </html>

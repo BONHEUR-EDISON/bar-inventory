@@ -67,11 +67,12 @@ export default defineConfig({
             }
           }
         ],
-        navigateFallback: '/index.html',
+        // <-- important : fallback vers offline.html uniquement quand vraiment hors ligne
+        navigateFallback: '/offline.html',
         navigateFallbackDenylist: [/^\/api\//]
       },
       devOptions: {
-        enabled: false,
+        enabled: false, // désactive le SW en dev pour éviter le blocage
         type: 'module'
       }
     })
