@@ -52,7 +52,7 @@ export default function App() {
 
       <Routes>
         {/* Page publique */}
-        <Route path="/" element={<Login />} />
+        <Route path="login" element={<Login />} />
 
         {/* Routes protégées */}
         <Route

@@ -21,7 +21,7 @@ export default function Sidebar({ mobile = false, close }: SidebarProps) {
     setLoading(true);
     const success = await logout();
     if (success) {
-      window.location.href = "/";
+      window.location.href = "/login"; // redirige vers login après déconnexion
     } else {
       setLoading(false);
     }

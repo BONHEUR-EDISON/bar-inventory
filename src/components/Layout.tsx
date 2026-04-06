@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 // src/components/Layout.tsx
 import { Outlet, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
