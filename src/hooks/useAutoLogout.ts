@@ -4,7 +4,7 @@ import { logout } from "../services/login"; // ton fichier logout
 const INACTIVITY_TIME = 30 * 60 * 1000; // 30 minutes en ms
 
 export function useAutoLogout() {
-  const timer = useRef<NodeJS.Timeout | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset le timer
   const resetTimer = () => {

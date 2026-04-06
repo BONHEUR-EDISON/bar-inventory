@@ -95,7 +95,7 @@ export default function Login() {
         
         {/* HEADER */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-800">Welcome Back 👋</h1>
+          <h1 className="text-3xl font-extrabold text-gray-800">Bar Inventory Manager 👋</h1>
           <p className="text-gray-500 mt-2 text-sm">Connecte-toi pour continuer</p>
         </div>
 
