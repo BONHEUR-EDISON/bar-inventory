@@ -40,8 +40,9 @@ export default defineConfig({
         clientsClaim: true,
         skipWaiting: true,
 
-        // ✅ fallback navigation
-        navigateFallback: '/login',
+        // ✅ Fallback simple pour offline
+        navigateFallback: '/offline.html',
+        navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
 
         runtimeCaching: [
           {
@@ -49,14 +50,7 @@ export default defineConfig({
             handler: 'NetworkFirst',
             options: {
               cacheName: 'pages-cache',
-              networkTimeoutSeconds: 3,
-              plugins: [
-                {
-                  handlerDidError: async () => {
-                    return caches.match('/offline.html')
-                  }
-                }
-              ]
+              networkTimeoutSeconds: 3
             }
           }
         ]
