@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // Mise à jour automatique
+      registerType: 'autoUpdate',
       includeAssets: [
         'favicon.svg',
         'robots.txt',
         'apple-touch-icon.png',
-        'icons/*.png' // Inclut tous les icônes
+        'icons/*.png'
       ],
       manifest: {
         name: 'Bar Inventory Manager',
@@ -20,7 +20,7 @@ export default defineConfig({
         theme_color: '#4f46e5',
         background_color: '#0f172a',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/login',
         icons: [
           { src: '/icons/icon-72x72.png', sizes: '72x72', type: 'image/png' },
           { src: '/icons/icon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -53,7 +53,7 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^\/.*\.(js|css|png|svg|ico|html)$/i,
+            urlPattern: /^\/.*\.(js|css|png|svg|ico)$/i,
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'static-resources' }
           },
@@ -67,11 +67,11 @@ export default defineConfig({
             }
           }
         ],
-        navigateFallback: '/offline.html',
-        navigateFallbackDenylist: [/^\/api\//] // Evite de rediriger les requêtes API
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//]
       },
       devOptions: {
-        enabled: true, // Permet le test PWA en dev
+        enabled: false,
         type: 'module'
       }
     })
