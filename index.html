@@ -1,53 +1,127 @@
 <!doctype html>
 <html lang="fr">
   <head>
-    <!-- Base -->
+    <!-- =========================
+         BASE
+    ========================= -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    
-    <!-- Title & SEO -->
+
+    <!-- 🔥 FIX MOBILE CRITIQUE -->
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" 
+    />
+
+    <!-- =========================
+         SEO
+    ========================= -->
     <title>Bar Inventory | Gestion intelligente de stock</title>
-    <meta name="description" content="Application moderne de gestion de stock pour bars et restaurants. Suivi des entrées, sorties et inventaires en temps réel." />
-    <meta name="keywords" content="bar, inventory, stock, gestion, restaurant, application" />
+
+    <meta 
+      name="description" 
+      content="Application moderne de gestion de stock pour bars et restaurants. Suivi des entrées, sorties et inventaires en temps réel." 
+    />
+
+    <meta 
+      name="keywords" 
+      content="bar, inventory, stock, gestion, restaurant, application" 
+    />
+
     <meta name="author" content="Edison Bonheur" />
 
-    <!-- Favicon -->
+    <!-- =========================
+         FAVICON
+    ========================= -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- PWA -->
+    <!-- =========================
+         PWA
+    ========================= -->
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" content="#0f172a" />
 
-    <!-- Apple (iOS) -->
-    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <!-- Android -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="mobile-web-app-title" content="Bar Inventory" />
 
-    <!-- Open Graph (Facebook / WhatsApp / LinkedIn) -->
+    <!-- =========================
+         iOS OPTIMISATION
+    ========================= -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bar Inventory" />
+
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+
+    <!-- Safe area (iPhone notch) -->
+    <meta name="viewport" content="viewport-fit=cover" />
+
+    <!-- =========================
+         SOCIAL (OG + TWITTER)
+    ========================= -->
     <meta property="og:title" content="Bar Inventory" />
     <meta property="og:description" content="Gérez facilement votre stock de bar en temps réel." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/icons/icon-512x512.png" />
 
-    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Bar Inventory" />
     <meta name="twitter:description" content="Application moderne de gestion de stock." />
     <meta name="twitter:image" content="/icons/icon-512x512.png" />
 
-    <!-- Fonts (optionnel mais pro) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- =========================
+         PERFORMANCE
+    ========================= -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
 
-    <!-- Style de base -->
+    <!-- Fonts -->
+    <link 
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
+      rel="stylesheet"
+    />
+
+    <!-- =========================
+         BASE STYLE (ANTI BUG MOBILE)
+    ========================= -->
     <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
       html, body {
         margin: 0;
         padding: 0;
+
+        width: 100%;
+        overflow-x: hidden;
+
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
+
         background-color: #0f172a;
-        color: #fff;
+        color: #ffffff;
+
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+        touch-action: manipulation;
+      }
+
+      #root {
+        width: 100%;
+        min-height: 100vh;
+
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* 🔥 FIX SAFE AREA iOS */
+      body {
+        padding:
+          env(safe-area-inset-top)
+          env(safe-area-inset-right)
+          env(safe-area-inset-bottom)
+          env(safe-area-inset-left);
       }
     </style>
   </head>
