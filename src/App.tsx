@@ -43,7 +43,7 @@ export default function App() {
           <Route path="/outputs" element={<Outputs />} />
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/inventory" element={<Inventory />} />
-          <Route path="/inventory-history" element={<InventoryHistory />} />
+          <Route path="/InventoryHistory" element={<InventoryHistory />} />
         </Route>
 
         {/* Fallback */}
