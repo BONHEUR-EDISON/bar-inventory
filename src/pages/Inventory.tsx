@@ -1,211 +1,252 @@
-import { useEffect, useState } from "react";
+// Inventory.tsx - Page Inventory Pro moderne et animée
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../services/supabaseClient";
 import toast, { Toaster } from "react-hot-toast";
-
-interface Product {
-  id: string;
-  name: string;
-  sale_price: number;
-}
-
-interface Movement {
-  product_id: string;
-  quantity: number;
-  type: "IN" | "OUT";
-  created_at: string;
-}
+import { motion, AnimatePresence } from "framer-motion";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 interface Row {
   product_id: string;
   name: string;
-  entriesByDate: Record<string, number>;
-  outputsByDate: Record<string, number>;
-  totalEntries: number;
-  totalOutputs: number;
-  sold: number;
+  sale_price: number;
+  purchase_price: number;
+  entries: number;
+  outputs: number;
+  stock_theoretical: number;
+  stock_calculated: number;
+  difference: number;
   revenue: number;
+  margin: number;
 }
 
 export default function InventoryPro() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [movements, setMovements] = useState<Movement[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // 🔒 Charger dernière date inventaire
+  // ================= INIT =================
   useEffect(() => {
-    const loadLastInventory = async () => {
-      const { data } = await supabase
-        .from("inventories")
+    const init = async () => {
+      const { data: org } = await supabase.from("user_organizations")
+        .select("organization_id")
+        .single();
+      if (!org) return;
+      setOrgId(org.organization_id);
+
+      const { data: inv } = await supabase.from("inventories")
         .select("inventory_date")
+        .eq("organization_id", org.organization_id)
         .order("inventory_date", { ascending: false })
         .limit(1)
         .single();
 
-      if (data) {
-        setStartDate(data.inventory_date.slice(0, 10));
+      if (inv) {
+        const d = inv.inventory_date.slice(0, 10);
+        setStartDate(d);
+        setLocked(true);
       } else {
         setStartDate(new Date().toISOString().slice(0, 10));
+        setLocked(false);
       }
     };
-
-    loadLastInventory();
+    init();
   }, []);
 
-  const getDates = () => {
-    const dates = [];
-    let d = new Date(startDate);
-    const end = new Date(endDate);
-
-    while (d <= end) {
-      dates.push(d.toISOString().slice(0, 10));
-      d.setDate(d.getDate() + 1);
-    }
-    return dates;
-  };
-
+  // ================= FETCH =================
   const fetchData = async () => {
-    const { data: p } = await supabase.from("products").select("*");
+    if (!orgId) return;
+    setLoading(true);
 
-    const { data: m } = await supabase
-      .from("stock_movements")
-      .select("*")
-      .gte("created_at", startDate)
-      .lte("created_at", endDate);
-
-    setProducts(p || []);
-    setMovements(m || []);
-  };
-
-  useEffect(() => {
-    if (startDate) fetchData();
-  }, [startDate, endDate]);
-
-  useEffect(() => {
-    const dates = getDates();
-
-    const result: Row[] = products.map((p) => {
-      const entriesByDate: any = {};
-      const outputsByDate: any = {};
-      let totalEntries = 0;
-      let totalOutputs = 0;
-
-      dates.forEach((d) => {
-        const dayMovements = movements.filter(
-          (m) =>
-            m.product_id === p.id &&
-            m.created_at.slice(0, 10) === d
-        );
-
-        const entries = dayMovements
-          .filter((m) => m.type === "IN")
-          .reduce((s, m) => s + m.quantity, 0);
-
-        const outputs = dayMovements
-          .filter((m) => m.type === "OUT")
-          .reduce((s, m) => s + m.quantity, 0);
-
-        entriesByDate[d] = entries;
-        outputsByDate[d] = outputs;
-
-        totalEntries += entries;
-        totalOutputs += outputs;
-      });
-
-      return {
-        product_id: p.id,
-        name: p.name,
-        entriesByDate,
-        outputsByDate,
-        totalEntries,
-        totalOutputs,
-        sold: totalOutputs,
-        revenue: totalOutputs * (p.sale_price || 0),
-      };
+    const { data, error } = await supabase.rpc("get_inventory_summary", {
+      p_org: orgId,
+      p_start: startDate,
+      p_end: endDate,
     });
 
-    setRows(result);
-  }, [products, movements]);
+    if (error) {
+      toast.error("Erreur chargement");
+      setLoading(false);
+      return;
+    }
+    setRows(data || []);
+    setLoading(false);
+  };
 
-  // 💾 SAVE INVENTORY
+  useEffect(() => {
+    if (startDate && orgId) fetchData();
+  }, [startDate, endDate, orgId]);
+
+  // ================= TOTALS =================
+  const totalRevenue = useMemo(() => rows.reduce((sum, r) => sum + (r.revenue || 0), 0), [rows]);
+  const totalMargin = useMemo(() => rows.reduce((sum, r) => sum + (r.margin || 0), 0), [rows]);
+
+  // ================= SAVE =================
   const saveInventory = async () => {
     try {
       const user = await supabase.auth.getUser();
-
-      const { data: org } = await supabase
-        .from("user_organizations")
-        .select("organization_id")
-        .single();
-
       const payload = rows.map((r) => ({
         product_id: r.product_id,
-        real_stock: r.totalEntries - r.totalOutputs,
-        unit_price: 0,
+        real_stock: r.stock_calculated,
+        unit_price: r.purchase_price,
       }));
-
       const { error } = await supabase.rpc("process_full_inventory", {
-        p_org: org?.organization_id,
+        p_org: orgId,
         p_inventory_date: endDate,
         p_created_by: user.data.user?.id,
         p_products: payload,
       });
-
       if (error) throw error;
-
       toast.success("Inventaire enregistré !");
-    } catch (err) {
+      setStartDate(endDate);
+      setLocked(true);
+    } catch {
       toast.error("Erreur !");
     }
   };
 
-  const dates = getDates();
+  // ================= EXPORT PDF =================
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.text("Inventaire PRO", 14, 10);
+    autoTable(doc, {
+      startY: 20,
+      head: [["Produit","Entrées","Sorties","Stock Théo","Stock Calc","Écart","CA","Marge"]],
+      body: rows.map(r => [
+        r.name, r.entries, r.outputs, r.stock_theoretical,
+        r.stock_calculated, r.difference, r.revenue, r.margin
+      ])
+    });
+    doc.save("inventaire.pdf");
+  };
+
+  // ================= EXPORT EXCEL =================
+  const exportExcel = () => {
+    const data = rows.map(r => ({
+      Produit: r.name,
+      Entrees: r.entries,
+      Sorties: r.outputs,
+      Stock_Theorique: r.stock_theoretical,
+      Stock_Calcule: r.stock_calculated,
+      Ecart: r.difference,
+      CA: r.revenue,
+      Marge: r.margin,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventaire");
+    XLSX.writeFile(wb, "inventaire.xlsx");
+  };
+
+  // ================= UI HELPERS =================
+  const diffColor = (d: number) => d === 0 ? "text-green-500" : d < 0 ? "text-red-500" : "text-yellow-500";
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6 bg-gray-50 min-h-screen">
       <Toaster />
 
-      <h1 className="text-2xl font-bold mb-4">Inventaire PRO</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6 text-gray-800">📦 Inventaire PRO</h1>
 
-      <div className="flex gap-2 mb-4">
-        <input type="date" value={startDate} disabled className="border p-2"/>
-        <input type="date" value={endDate} onChange={(e)=>setEndDate(e.target.value)} className="border p-2"/>
-        <button onClick={saveInventory} className="bg-green-600 text-white px-4">Enregistrer</button>
+      {/* FILTER + ACTIONS */}
+      <div className="flex flex-col md:flex-row gap-3 mb-6 items-center">
+        <input type="date" value={startDate} disabled={locked} className="border rounded px-3 py-2 w-full md:w-auto"/>
+        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="border rounded px-3 py-2 w-full md:w-auto"/>
+        <div className="flex gap-2">
+          <button onClick={saveInventory} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow-md transition transform hover:scale-105">
+            Enregistrer
+          </button>
+          <button onClick={exportPDF} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow-md transition transform hover:scale-105">
+            PDF
+          </button>
+          <button onClick={exportExcel} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow-md transition transform hover:scale-105">
+            Excel
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-auto">
-        <table className="min-w-full border">
-          <thead>
+      {loading && (
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-gray-500 mb-4">
+          Chargement...
+        </motion.p>
+      )}
+
+      {/* MOBILE CARDS */}
+      <div className="md:hidden space-y-4">
+        <AnimatePresence>
+          {rows.map((r) => (
+            <motion.div
+              key={r.product_id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="border rounded-xl p-4 shadow-lg bg-white"
+            >
+              <h2 className="font-semibold text-lg">{r.name}</h2>
+              <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-gray-700">
+                <span>Entrées:</span><span>{r.entries}</span>
+                <span>Sorties:</span><span>{r.outputs}</span>
+                <span>Stock:</span><span>{r.stock_calculated}</span>
+                <span>Écart:</span><span className={diffColor(r.difference)}>{r.difference}</span>
+                <span>CA:</span><span>{r.revenue}</span>
+                <span>Marge:</span><span>{r.margin}</span>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {/* TOTAL MOBILE */}
+        <motion.div
+          className="border rounded-xl p-4 bg-gray-100 font-bold text-gray-800 shadow-md"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          TOTAL CA: {totalRevenue} <br/>
+          TOTAL MARGE: {totalMargin}
+        </motion.div>
+      </div>
+
+      {/* DESKTOP TABLE */}
+      <div className="hidden md:block overflow-auto rounded-lg shadow-lg bg-white">
+        <table className="min-w-full text-left border-collapse">
+          <thead className="bg-gray-100 text-gray-800 font-semibold">
             <tr>
-              <th rowSpan={2}>Produit</th>
-              <th colSpan={dates.length}>Entrées</th>
-              <th colSpan={dates.length}>Sorties</th>
-              <th rowSpan={2}>Total Entrées</th>
-              <th rowSpan={2}>Total Sorties</th>
-              <th rowSpan={2}>Vendu</th>
-              <th rowSpan={2}>CA</th>
-            </tr>
-            <tr>
-              {dates.map(d => <th key={"e"+d}>{d}</th>)}
-              {dates.map(d => <th key={"s"+d}>{d}</th>)}
+              <th className="p-3">Produit</th>
+              <th className="p-3">Entrées</th>
+              <th className="p-3">Sorties</th>
+              <th className="p-3">Stock Théo</th>
+              <th className="p-3">Stock Calc</th>
+              <th className="p-3">Écart</th>
+              <th className="p-3">CA</th>
+              <th className="p-3">Marge</th>
             </tr>
           </thead>
-
           <tbody>
-            {rows.map(r => (
-              <tr key={r.product_id}>
-                <td>{r.name}</td>
-
-                {dates.map(d => <td key={d}>{r.entriesByDate[d]}</td>)}
-                {dates.map(d => <td key={d}>{r.outputsByDate[d]}</td>)}
-
-                <td>{r.totalEntries}</td>
-                <td>{r.totalOutputs}</td>
-                <td>{r.sold}</td>
-                <td>{r.revenue}</td>
-              </tr>
+            {rows.map((r) => (
+              <motion.tr key={r.product_id} className="border-t hover:bg-gray-50" whileHover={{ scale: 1.02 }}>
+                <td className="p-3">{r.name}</td>
+                <td className="p-3">{r.entries}</td>
+                <td className="p-3">{r.outputs}</td>
+                <td className="p-3">{r.stock_theoretical}</td>
+                <td className="p-3">{r.stock_calculated}</td>
+                <td className={`p-3 font-semibold ${diffColor(r.difference)}`}>{r.difference}</td>
+                <td className="p-3">{r.revenue}</td>
+                <td className="p-3">{r.margin}</td>
+              </motion.tr>
             ))}
           </tbody>
+          <tfoot className="bg-gray-200 font-bold text-gray-800">
+            <tr>
+              <td className="p-3" colSpan={5}>TOTAL</td>
+              <td  className="p-3" ></td>
+              <td className="p-3">{totalRevenue}</td>
+              <td className="p-3">{totalMargin}</td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>

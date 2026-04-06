@@ -8,10 +8,13 @@ import Entries from "./pages/Entries";
 import Outputs from "./pages/Outputs";
 import Expenses from "./pages/Expenses";
 import Inventory from "./pages/Inventory";
+import InventoryHistory from "./pages/InventoryHistory";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { useAutoLogout } from "./hooks/useAutoLogout";
 
 export default function App() {
+  useAutoLogout();
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
 
   // Prompt pour mise à jour SW
@@ -65,6 +68,7 @@ export default function App() {
           <Route path="outputs" element={<Outputs />} />
           <Route path="expenses" element={<Expenses />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="InventoryHistory" element={<InventoryHistory />} />
         </Route>
 
         {/* Fallback */}

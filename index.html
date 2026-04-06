@@ -1,17 +1,62 @@
 <!doctype html>
 <html lang="fr">
   <head>
+    <!-- Base -->
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    
+    <!-- Title & SEO -->
+    <title>Bar Inventory | Gestion intelligente de stock</title>
+    <meta name="description" content="Application moderne de gestion de stock pour bars et restaurants. Suivi des entrées, sorties et inventaires en temps réel." />
+    <meta name="keywords" content="bar, inventory, stock, gestion, restaurant, application" />
+    <meta name="author" content="Edison Bonheur" />
+
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bar-inventory-vite</title>
-    <!-- iOS support -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#4f46e5" />
+
+    <!-- Apple (iOS) -->
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bar Inventory" />
+
+    <!-- Open Graph (Facebook / WhatsApp / LinkedIn) -->
+    <meta property="og:title" content="Bar Inventory" />
+    <meta property="og:description" content="Gérez facilement votre stock de bar en temps réel." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/icons/icon-512x512.png" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bar Inventory" />
+    <meta name="twitter:description" content="Application moderne de gestion de stock." />
+    <meta name="twitter:image" content="/icons/icon-512x512.png" />
+
+    <!-- Fonts (optionnel mais pro) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Style de base -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        background-color: #0f172a;
+        color: #fff;
+      }
+    </style>
   </head>
+
   <body>
+    <!-- React root -->
     <div id="root"></div>
+
+    <!-- App -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

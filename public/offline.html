@@ -3,14 +3,146 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offline</title>
+  <title>Offline - Bar Inventory</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" type="image/png" href="/icons/icon-192x192.png">
+
   <style>
-    body { font-family: sans-serif; text-align: center; padding: 2rem; background: #f3f4f6; }
-    h1 { color: #4f46e5; }
+    :root {
+      --primary-color: #4f46e5;
+      --background-color: #0f172a;
+      --text-color: #f9fafb;
+      --secondary-text: #cbd5e1;
+      --font-family: 'Inter', sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: var(--font-family);
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      color: var(--primary-color);
+      margin: 1rem 0;
+    }
+
+    p {
+      font-size: 1.2rem;
+      color: var(--secondary-text);
+      max-width: 90%;
+      margin-bottom: 2rem;
+    }
+
+    .wifi-signal {
+      width: 120px;
+      height: 120px;
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    .wifi-signal circle {
+      fill: none;
+      stroke: var(--primary-color);
+      stroke-width: 4;
+      stroke-dasharray: 157;
+      stroke-dashoffset: 157;
+      animation: signal-blink 1.5s infinite;
+    }
+
+    .wifi-signal circle:nth-child(1) { animation-delay: 0s; }
+    .wifi-signal circle:nth-child(2) { animation-delay: 0.3s; }
+    .wifi-signal circle:nth-child(3) { animation-delay: 0.6s; }
+
+    @keyframes signal-blink {
+      0% { stroke-dashoffset: 157; opacity: 0.3; }
+      50% { stroke-dashoffset: 0; opacity: 1; }
+      100% { stroke-dashoffset: 157; opacity: 0.3; }
+    }
+
+    .retry-button {
+      padding: 0.8rem 2rem;
+      font-size: 1rem;
+      color: #fff;
+      background-color: var(--primary-color);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s, background-color 0.2s;
+    }
+
+    .retry-button:hover {
+      transform: scale(1.05);
+      background-color: #6366f1;
+    }
+
+    /* Loader dots */
+    .loader {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .loader div {
+      width: 12px;
+      height: 12px;
+      margin: 0 5px;
+      background-color: var(--primary-color);
+      border-radius: 50%;
+      animation: bounce 0.6s infinite alternate;
+    }
+
+    .loader div:nth-child(2) { animation-delay: 0.2s; }
+    .loader div:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      from { transform: translateY(0); }
+      to { transform: translateY(-15px); }
+    }
   </style>
 </head>
 <body>
+
+  <!-- Loader animée -->
+  <div class="loader">
+    <div></div>
+    <div></div>
+    <div></div>
+  </div>
+
+  <!-- Wi-Fi signal -->
+  <svg class="wifi-signal" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="15"/>
+    <circle cx="32" cy="32" r="25"/>
+    <circle cx="32" cy="32" r="35"/>
+  </svg>
+
   <h1>Vous êtes hors ligne</h1>
-  <p>La connexion Internet est absente. Revenez plus tard.</p>
+  <p>La connexion Internet est absente. Revenez plus tard pour continuer à gérer votre inventaire.</p>
+  <button class="retry-button" onclick="retry()">Réessayer</button>
+
+  <script>
+    function retry() {
+      if (navigator.onLine) {
+        location.reload();
+      } else {
+        alert("Toujours hors ligne. Vérifiez votre connexion Internet.");
+      }
+    }
+
+    window.addEventListener('online', () => {
+      location.reload();
+    });
+  </script>
+
 </body>
 </html>

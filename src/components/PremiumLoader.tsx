@@ -1,4 +1,5 @@
 // src/components/PremiumLoader.tsx
+
 import { createPortal } from "react-dom";
 import "./PremiumLoader.css";
 
