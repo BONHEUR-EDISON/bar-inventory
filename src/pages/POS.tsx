@@ -24,7 +24,7 @@ interface CategoryFilterProps {
 
 interface ProductCardProps {
   product: Product;
-  onAdd: (product: Product, ref: React.RefObject<HTMLDivElement>) => void;
+  onAdd: (product: Product) => void;
   refProp: (el: HTMLDivElement | null) => void;
 }
 
@@ -85,7 +85,7 @@ function ProductCard({ product, onAdd, refProp }: ProductCardProps) {
       </div>
       <button
         disabled={product.stock === 0}
-        onClick={() => onAdd(product, { current: null } as React.RefObject<HTMLDivElement>)}
+        onClick={() => onAdd(product)}
         className={`mt-3 py-1 rounded text-white font-medium transition ${
           product.stock === 0 ? "bg-gray-400" : "bg-green-500 hover:bg-green-600"
         }`}
@@ -222,8 +222,9 @@ export default function POS() {
     setLoading(false);
   };
 
-  const addToCart = (product: Product, ref: React.RefObject<HTMLDivElement>) => {
-    const rect = ref.current?.getBoundingClientRect();
+  const addToCart = (product: Product) => {
+    const ref = productRefs.current[product.id];
+    const rect = ref?.getBoundingClientRect();
     const cartRect = document.querySelector(".cart-target")?.getBoundingClientRect();
 
     if (rect && cartRect) {
