@@ -1,31 +1,68 @@
 'use client'
 
 import { useEffect, useState, useRef } from "react";
+import type { ChangeEvent } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { supabase } from "../services/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
 
+// Types
 interface Product { id: string; name: string; category: string; sale_price: number; stock: number }
 interface CartItem extends Product { quantity: number }
 
-function SearchBar({ search, setSearch }: any) {
+interface SearchBarProps {
+  search: string;
+  setSearch: (value: string) => void;
+}
+
+interface CategoryFilterProps {
+  categories: string[];
+  selected: string;
+  setSelected: (value: string) => void;
+}
+
+interface ProductCardProps {
+  product: Product;
+  onAdd: (product: Product, ref: React.RefObject<HTMLDivElement>) => void;
+  refProp: (el: HTMLDivElement | null) => void;
+}
+
+interface CartItemRowProps {
+  item: CartItem;
+  onUpdate: (id: string, qty: number) => void;
+  onRemove: (id: string) => void;
+}
+
+interface CartPanelProps {
+  cart: CartItem[];
+  total: number;
+  onUpdate: (id: string, qty: number) => void;
+  onRemove: (id: string) => void;
+  onCheckout: () => void;
+  isMobile: boolean;
+  open: boolean;
+  onClose: () => void;
+}
+
+// Components
+function SearchBar({ search, setSearch }: SearchBarProps) {
   return (
     <input
       type="text"
       placeholder="Rechercher un produit..."
       value={search}
-      onChange={(e) => setSearch(e.target.value)}
+      onChange={(e: ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
       className="p-3 border rounded-lg flex-1 bg-white shadow focus:ring-2 focus:ring-indigo-500 outline-none"
     />
   );
 }
 
-function CategoryFilter({ categories, selected, setSelected }: any) {
+function CategoryFilter({ categories, selected, setSelected }: CategoryFilterProps) {
   return (
     <select
       value={selected}
-      onChange={(e) => setSelected(e.target.value)}
+      onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelected(e.target.value)}
       className="p-3 border rounded-lg w-40 bg-white shadow focus:ring-2 focus:ring-indigo-500 outline-none"
     >
       {categories.map((cat: string) => <option key={cat}>{cat}</option>)}
@@ -33,7 +70,7 @@ function CategoryFilter({ categories, selected, setSelected }: any) {
   );
 }
 
-function ProductCard({ product, onAdd, refProp }: any) {
+function ProductCard({ product, onAdd, refProp }: ProductCardProps) {
   return (
     <motion.div
       className="bg-white rounded-lg shadow p-4 flex flex-col justify-between hover:shadow-xl cursor-pointer h-40 relative"
@@ -48,7 +85,7 @@ function ProductCard({ product, onAdd, refProp }: any) {
       </div>
       <button
         disabled={product.stock === 0}
-        onClick={() => onAdd(product, refProp)}
+        onClick={() => onAdd(product, { current: null } as React.RefObject<HTMLDivElement>)}
         className={`mt-3 py-1 rounded text-white font-medium transition ${
           product.stock === 0 ? "bg-gray-400" : "bg-green-500 hover:bg-green-600"
         }`}
@@ -59,7 +96,7 @@ function ProductCard({ product, onAdd, refProp }: any) {
   );
 }
 
-function CartItemRow({ item, onUpdate, onRemove }: any) {
+function CartItemRow({ item, onUpdate, onRemove }: CartItemRowProps) {
   return (
     <motion.div
       className="flex justify-between items-center mb-2 p-2 bg-gray-50 rounded-lg shadow-sm"
@@ -74,7 +111,14 @@ function CartItemRow({ item, onUpdate, onRemove }: any) {
       </div>
       <div className="flex items-center gap-1">
         <button onClick={() => onUpdate(item.id, item.quantity - 1)} className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300">-</button>
-        <input type="number" value={item.quantity} min={1} max={item.stock} onChange={(e) => onUpdate(item.id, parseInt(e.target.value))} className="w-12 text-center border rounded px-1 py-0.5" />
+        <input
+          type="number"
+          value={item.quantity}
+          min={1}
+          max={item.stock}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onUpdate(item.id, parseInt(e.target.value))}
+          className="w-12 text-center border rounded px-1 py-0.5"
+        />
         <button onClick={() => onUpdate(item.id, item.quantity + 1)} className="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300">+</button>
         <button onClick={() => onRemove(item.id)} className="text-red-500 font-bold"><X size={16} /></button>
       </div>
@@ -82,7 +126,7 @@ function CartItemRow({ item, onUpdate, onRemove }: any) {
   );
 }
 
-function CartPanel({ cart, total, onUpdate, onRemove, onCheckout, isMobile, open, onClose }: any) {
+function CartPanel({ cart, total, onUpdate, onRemove, onCheckout, isMobile, open, onClose }: CartPanelProps) {
   return (
     <AnimatePresence>
       {(isMobile ? open : true) && (
@@ -103,7 +147,7 @@ function CartPanel({ cart, total, onUpdate, onRemove, onCheckout, isMobile, open
 
           <div className="flex-1 overflow-y-auto p-4">
             <AnimatePresence>
-              {cart.map((item: any) => (
+              {cart.map(item => (
                 <CartItemRow key={item.id} item={item} onUpdate={onUpdate} onRemove={onRemove} />
               ))}
             </AnimatePresence>
@@ -125,6 +169,7 @@ function CartPanel({ cart, total, onUpdate, onRemove, onCheckout, isMobile, open
   );
 }
 
+// Main POS component
 export default function POS() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -135,7 +180,7 @@ export default function POS() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
 
   const productRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [flyingItems, setFlyingItems] = useState<any[]>([]);
+  const [flyingItems, setFlyingItems] = useState<{id:string,x:number,y:number,targetX:number,targetY:number}[]>([]);
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
@@ -168,7 +213,7 @@ export default function POS() {
       .eq("organization_id", orgId);
     if (stockErr) { toast.error("Erreur récupération stock"); setLoading(false); return; }
 
-    const merged = productsData?.map((p: any) => ({
+    const merged: Product[] = productsData?.map((p: any) => ({
       ...p,
       stock: stockData?.find((s: any) => s.product_id === p.id)?.stock || 0
     })) || [];
@@ -177,7 +222,7 @@ export default function POS() {
     setLoading(false);
   };
 
-  const addToCart = (product: Product, ref: any) => {
+  const addToCart = (product: Product, ref: React.RefObject<HTMLDivElement>) => {
     const rect = ref.current?.getBoundingClientRect();
     const cartRect = document.querySelector(".cart-target")?.getBoundingClientRect();
 
@@ -247,7 +292,7 @@ export default function POS() {
                 key={p.id}
                 product={p}
                 onAdd={addToCart}
-                refProp={el => (productRefs.current[p.id] = el)}
+                refProp={(el: HTMLDivElement | null) => (productRefs.current[p.id] = el)}
               />
             ))}
           </div>
@@ -270,7 +315,7 @@ export default function POS() {
         cart={cart}
         total={total}
         onUpdate={updateQuantity}
-        onRemove={id => setCart(p => p.filter(i => i.id !== id))}
+        onRemove={(id: string) => setCart(p => p.filter(i => i.id !== id))}
         onCheckout={handleCheckout}
         isMobile={isMobile}
         open={mobileCartOpen}

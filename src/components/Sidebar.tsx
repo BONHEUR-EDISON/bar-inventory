@@ -5,23 +5,21 @@ import { LogOut, LayoutDashboard, Box, ArrowDown, ArrowUp, BarChart3 } from "luc
 import { logout } from "../components/logout";
 import { useDarkMode } from "../hooks/useDarkMode";
 
-// ---------------- Sidebar Props ----------------
 interface SidebarProps {
   mobile?: boolean;
   close?: () => void;
 }
 
-// ---------------- Sidebar Component ----------------
 export default function Sidebar({ mobile = false, close }: SidebarProps) {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
-  const { dark } = useDarkMode(); // <-- correction ici
+  const { dark } = useDarkMode();
 
   const handleLogout = async () => {
     setLoading(true);
     const success = await logout();
     if (success) {
-      window.location.href = "/login"; // redirige vers login après déconnexion
+      window.location.href = "/login";
     } else {
       setLoading(false);
     }
@@ -30,15 +28,15 @@ export default function Sidebar({ mobile = false, close }: SidebarProps) {
   return (
     <div
       className={`
-        w-64 h-full p-5 flex flex-col justify-between
+        h-full p-5 flex flex-col justify-between
         border-r ${dark ? "border-gray-700 bg-gray-900" : "border-gray-100 bg-white"}
-        ${mobile ? "relative z-50 shadow-xl" : ""}
+        ${mobile ? "relative z-50 shadow-xl w-[80vw] max-w-[288px]" : "w-64 lg:w-72"}
       `}
     >
       {/* HEADER */}
       <div>
         <h1 className={`text-2xl font-extrabold mb-8 tracking-tight ${dark ? "text-white" : "text-gray-800"}`}>
-          MyApp
+          Bar Inventory
         </h1>
 
         {/* NAV */}
@@ -48,7 +46,7 @@ export default function Sidebar({ mobile = false, close }: SidebarProps) {
           <NavItem to="/entries" label="Entrées" icon={ArrowDown} current={location.pathname} onClick={close} dark={dark} />
           <NavItem to="/outputs" label="Sorties" icon={ArrowUp} current={location.pathname} onClick={close} dark={dark} />
           <NavItem to="/inventory" label="Stock" icon={BarChart3} current={location.pathname} onClick={close} dark={dark} />
-          <NavItem to="/InventoryHistory" label="Historique" icon={BarChart3} current={location.pathname}  onClick={close} dark={dark} />
+          <NavItem to="/InventoryHistory" label="Historique" icon={BarChart3} current={location.pathname} onClick={close} dark={dark} />
         </nav>
       </div>
 
@@ -75,19 +73,17 @@ export default function Sidebar({ mobile = false, close }: SidebarProps) {
   );
 }
 
-// ---------------- NavItem Props ----------------
+// ---------------- NavItem ----------------
 interface NavItemProps {
   to: string;
   label: string;
   icon: React.ComponentType<{ size?: number }>;
   current: string;
   onClick?: () => void;
-  dark: boolean; // <-- correction ici
+  dark: boolean;
 }
 
-// ---------------- NavItem Component ----------------
-function NavItem(props: NavItemProps) {
-  const { to, label, icon: Icon, current, onClick, dark } = props;
+function NavItem({ to, label, icon: Icon, current, onClick, dark }: NavItemProps) {
   const isActive = current === to;
 
   return (
@@ -108,7 +104,7 @@ function NavItem(props: NavItemProps) {
       `}
     >
       <Icon size={18} />
-      {label}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

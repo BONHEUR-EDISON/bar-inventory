@@ -5,8 +5,8 @@
          BASE
     ========================= -->
     <meta charset="UTF-8" />
-
-    <!-- 🔥 FIX MOBILE CRITIQUE -->
+    
+    <!-- 🔥 META VIEWPORT CORRECTE -->
     <meta 
       name="viewport" 
       content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" 
@@ -16,17 +16,14 @@
          SEO
     ========================= -->
     <title>Bar Inventory | Gestion intelligente de stock</title>
-
     <meta 
       name="description" 
       content="Application moderne de gestion de stock pour bars et restaurants. Suivi des entrées, sorties et inventaires en temps réel." 
     />
-
     <meta 
       name="keywords" 
       content="bar, inventory, stock, gestion, restaurant, application" 
     />
-
     <meta name="author" content="Edison Bonheur" />
 
     <!-- =========================
@@ -39,80 +36,54 @@
     ========================= -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0f172a" />
-
-    <!-- Android -->
     <meta name="mobile-web-app-capable" content="yes" />
-
-    <!-- =========================
-         iOS OPTIMISATION
-    ========================= -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Bar Inventory" />
-
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 
-    <!-- Safe area (iPhone notch) -->
-   
-
     <!-- =========================
-         SOCIAL (OG + TWITTER)
+         SOCIAL
     ========================= -->
     <meta property="og:title" content="Bar Inventory" />
     <meta property="og:description" content="Gérez facilement votre stock de bar en temps réel." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/icons/icon-512x512.png" />
-
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Bar Inventory" />
     <meta name="twitter:description" content="Application moderne de gestion de stock." />
     <meta name="twitter:image" content="/icons/icon-512x512.png" />
 
     <!-- =========================
-         PERFORMANCE
+         FONTS
     ========================= -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
-
-    <!-- Fonts -->
     <link 
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
       rel="stylesheet"
     />
 
     <!-- =========================
-         BASE STYLE (ANTI BUG MOBILE)
+         BASE STYLE RESPONSIVE
     ========================= -->
     <style>
-      *,
-      *::before,
-      *::after {
+      *, *::before, *::after {
         box-sizing: border-box;
       }
 
       html, body {
         margin: 0;
         padding: 0;
-
         width: 100%;
-        overflow-x: hidden;
-
+        min-height: 100vh;
         font-family: 'Inter', system-ui, -apple-system, sans-serif;
-
         background-color: #0f172a;
         color: #ffffff;
-
         -webkit-text-size-adjust: 100%;
         text-size-adjust: 100%;
         touch-action: manipulation;
-      }
-
-      #root {
-        width: 100%;
-        min-height: 100vh;
-
-        display: flex;
-        flex-direction: column;
+        overflow-x: hidden; /* évite scroll horizontal accidentel */
       }
 
       /* 🔥 FIX SAFE AREA iOS */
@@ -123,9 +94,29 @@
           env(safe-area-inset-bottom)
           env(safe-area-inset-left);
       }
+
+      #root {
+        width: 100%;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        /* Permet aux enfants flexibles de s'adapter */
+      }
+
+      /* Styles de base responsives pour images et contenus */
+      img, video, canvas {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Containers flexibles */
+      .container {
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 1rem; /* padding responsive horizontal */
+      }
     </style>
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8461858880836195"
-     crossorigin="anonymous"></script>
   </head>
 
   <body>

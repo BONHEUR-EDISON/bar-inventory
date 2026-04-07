@@ -1,6 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 // src/components/Layout.tsx
-
 import { Outlet, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
@@ -9,9 +7,8 @@ import { useDarkMode } from "../hooks/useDarkMode";
 import PremiumLoader3D from "./PremiumLoader3D";
 
 export default function Layout() {
-  const [open, setOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { dark = false } = useDarkMode();
-
   const location = useLocation();
   const [loading, setLoading] = useState(false);
 
@@ -24,17 +21,13 @@ export default function Layout() {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
-  const handleClose = () => setOpen(false);
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <div
-      className={`
-        flex 
-        min-h-screen 
-        w-full 
-        overflow-hidden 
-        ${dark ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-900"}
-      `}
+      className={`flex min-h-screen w-full overflow-hidden ${
+        dark ? "bg-gray-950 text-white" : "bg-gray-100 text-gray-900"
+      }`}
     >
       {/* =========================
           LOADER GLOBAL
@@ -49,37 +42,28 @@ export default function Layout() {
       </aside>
 
       {/* =========================
-          SIDEBAR MOBILE (iOS STYLE)
+          SIDEBAR MOBILE (DRAWER)
       ========================= */}
       <div
-        className={`
-          fixed inset-0 z-50 md:hidden
-          transition-all duration-300
-          ${open ? "pointer-events-auto" : "pointer-events-none"}
-        `}
+        className={`fixed inset-0 z-50 md:hidden transition-all duration-300 ${
+          sidebarOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
       >
         {/* Overlay */}
         <div
-          onClick={handleClose}
-          className={`
-            absolute inset-0 
-            bg-black/40 backdrop-blur-sm
-            transition-opacity duration-300
-            ${open ? "opacity-100" : "opacity-0"}
-          `}
+          onClick={closeSidebar}
+          className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
+            sidebarOpen ? "opacity-100" : "opacity-0"
+          }`}
         />
 
         {/* Drawer */}
         <div
-          className={`
-            absolute left-0 top-0 h-full w-72
-            bg-white dark:bg-gray-900
-            shadow-xl
-            transform transition-transform duration-300
-            ${open ? "translate-x-0" : "-translate-x-full"}
-          `}
+          className={`absolute left-0 top-0 h-full w-[80vw] max-w-[288px] bg-white dark:bg-gray-900 shadow-xl transform transition-transform duration-300 ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
         >
-          <Sidebar mobile close={handleClose} />
+          <Sidebar mobile close={closeSidebar} />
         </div>
       </div>
 
@@ -87,23 +71,18 @@ export default function Layout() {
           MAIN AREA
       ========================= */}
       <div className="flex flex-col flex-1 min-h-screen overflow-hidden">
-        
-        {/* HEADER sticky iOS */}
+        {/* HEADER sticky */}
         <div className="sticky top-0 z-40 backdrop-blur-md bg-white/70 dark:bg-gray-900/70 border-b border-gray-200 dark:border-gray-800">
-          <Header openSidebar={() => setOpen(true)} />
+          <Header openSidebar={() => setSidebarOpen(true)} />
         </div>
 
         {/* CONTENT */}
-        <main
-          className="
-            flex-1 
-            overflow-y-auto 
-            overflow-x-hidden
-            p-4 md:p-6
-          "
-        >
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-4 md:px-6 py-4">
           <div className="max-w-7xl mx-auto w-full">
-            <Outlet />
+            {/* wrapper responsive pour tableaux ou images */}
+            <div className="overflow-x-auto">{/* Outlet */}
+              <Outlet />
+            </div>
           </div>
         </main>
       </div>

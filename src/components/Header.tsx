@@ -3,25 +3,27 @@ import { Menu } from "lucide-react";
 import { useDarkMode } from "../hooks/useDarkMode";
 
 interface HeaderProps {
-  openSidebar: () => void; // Typage strict
+  openSidebar: () => void;
+  title?: string; // optionnel pour changer le titre dynamique
 }
 
-export default function Header({ openSidebar }: HeaderProps) {
+export default function Header({ openSidebar, title = "Dashboard" }: HeaderProps) {
   const { dark, setDark } = useDarkMode();
 
   return (
-    <header className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <header className="sticky top-0 z-40 flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md">
       {/* LEFT */}
       <div className="flex items-center gap-3">
-        {/* Bouton hamburger pour mobile */}
+        {/* Hamburger mobile */}
         <button
-          className="md:hidden p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+          className="md:hidden p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition"
           onClick={openSidebar}
         >
           <Menu className={dark ? "text-white" : "text-gray-800"} />
         </button>
-        <h2 className={`font-semibold ${dark ? "text-white" : "text-gray-800"}`}>
-          Dashboard
+        {/* Title */}
+        <h2 className={`font-semibold text-lg sm:text-xl truncate ${dark ? "text-white" : "text-gray-800"}`}>
+          {title}
         </h2>
       </div>
 
