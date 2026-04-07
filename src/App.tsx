@@ -8,6 +8,7 @@ import Outputs from "./pages/Outputs";
 import Expenses from "./pages/Expenses";
 import Inventory from "./pages/Inventory";
 import InventoryHistory from "./pages/InventoryHistory";
+import POS from "./pages/POS";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAutoLogout } from "./hooks/useAutoLogout";
@@ -44,6 +45,8 @@ export default function App() {
           <Route path="/expenses" element={<Expenses />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/InventoryHistory" element={<InventoryHistory />} />
+          <Route path="/pos" element={<POS />} />
+
         </Route>
 
         {/* Fallback */}

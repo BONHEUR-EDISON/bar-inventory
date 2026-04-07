@@ -197,14 +197,27 @@ export default function Entries() {
     p.name.toLowerCase().includes(searchText.toLowerCase().trim())
   );
 
-  const handleSelectProduct = (product: Product) => {
-    setFormData(prev => ({ ...prev, product_id: product.id, unit_price: product.purchase_price || 0 }));
-    const entry = entries
-      .filter(e => e.product_id === product.id)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-    setCurrentStock(entry ? entry.stock_after : 0);
-    setSearchText(product.name);
-  };
+  const handleSelectProduct = async (product: Product) => {
+  setFormData(prev => ({
+    ...prev,
+    product_id: product.id,
+    unit_price: product.purchase_price || 0
+  }));
+
+  const { data, error } = await supabase
+    .from("product_stock")
+    .select("stock")
+    .eq("product_id", product.id)
+    .single();
+
+  if (error) {
+    toast.error("Erreur récupération stock");
+    return;
+  }
+
+  setCurrentStock(data?.stock || 0);
+  setSearchText(product.name);
+};
 
   const projectedStock =
     formData.product_id && formData.quantity
