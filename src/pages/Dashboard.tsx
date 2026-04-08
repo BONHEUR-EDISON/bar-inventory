@@ -1,10 +1,7 @@
-// src/pages/Dashboard.tsx
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../services/supabaseClient";
-import { useDarkMode } from "../hooks/useDarkMode";
-import { motion, AnimatePresence } from "framer-motion";
 import toast, { Toaster } from "react-hot-toast";
 import {
   Chart as ChartJS,
@@ -12,25 +9,26 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
   BarElement,
+  ArcElement,
   Tooltip,
   Legend,
 } from "chart.js";
 import { Line, Doughnut, Bar } from "react-chartjs-2";
+import dayjs from "dayjs";
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
   BarElement,
+  ArcElement,
   Tooltip,
   Legend
 );
 
-// -------------------- TYPES --------------------
+// ---------------- TYPES ----------------
 type DataItem = {
   name: string;
   revenue: number;
@@ -41,252 +39,278 @@ type DataItem = {
   difference: number;
 };
 
+type DailyTrend = {
+  date: string;
+  revenue: number;
+  debt: number;
+};
+
 type AlertItem = {
   msg: string;
   type: "danger" | "warning" | "info";
 };
 
-// -------------------- DASHBOARD --------------------
 export default function Dashboard() {
-  const { dark } = useDarkMode();
-
   const [data, setData] = useState<DataItem[]>([]);
   const [stats, setStats] = useState({
     revenue: 0,
     profit: 0,
-    loss: 0,
+    perte: 0,
     stock: 0,
     outputs: 0,
     products: 0,
+    clients: 0,
+    debt: 0,
   });
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [trends, setTrends] = useState<DailyTrend[]>([]);
+  const [topClients, setTopClients] = useState<{ name: string; total: number }[]>([]);
 
-  // -------------------- LOAD DATA --------------------
-  const load = async () => {
-    try {
-      const { data: user } = await supabase.auth.getUser();
-
-      const { data: orgData } = await supabase
-        .from("user_organizations")
-        .select("organization_id")
-        .eq("user_id", user?.user?.id)
-        .single();
-
-      const org = orgData?.organization_id;
-
-      const { data: inventoryData, error } = await supabase.rpc("get_inventory_summary", {
-        p_org: org,
-        p_start: "2000-01-01",
-        p_end: new Date().toISOString(),
-      });
-
-      if (error) throw error;
-
-      const safeData: DataItem[] = inventoryData || [];
-      setData(safeData);
-
-      // ----- CALCUL STATS -----
-      let revenue = 0,
-        profit = 0,
-        loss = 0,
-        totalStock = 0,
-        totalOutputs = 0;
-
-      safeData.forEach((d) => {
-        revenue += d.revenue;
-        profit += d.margin;
-        totalStock += d.stock_theoretical;
-        totalOutputs += d.outputs;
-      });
-
-      if (profit < 0) loss = Math.abs(profit);
-
-      setStats({
-        revenue,
-        profit,
-        loss,
-        stock: totalStock,
-        outputs: totalOutputs,
-        products: safeData.length,
-      });
-
-      // ----- ALERTS -----
-      const newAlerts: AlertItem[] = [];
-      safeData.forEach((d) => {
-        if (d.margin < 0) newAlerts.push({ msg: `🔴 ${d.name} en perte`, type: "danger" });
-        if (d.stock_theoretical < 5 && d.outputs > 5)
-          newAlerts.push({ msg: `⚠️ ${d.name} rupture imminente`, type: "warning" });
-        if (Math.abs(d.difference) > 5)
-          newAlerts.push({ msg: `❗ ${d.name} anomalie stock`, type: "info" });
-      });
-      setAlerts(newAlerts.slice(0, 5));
-    } catch (err) {
-      toast.error("Erreur dashboard");
-      console.error(err);
-    }
-  };
-
+  // ---------------- LOAD DATA ----------------
   useEffect(() => {
+    const load = async () => {
+      try {
+        const { data: user } = await supabase.auth.getUser();
+        if (!user?.user) return;
+
+        const { data: orgData } = await supabase
+          .from("user_organizations")
+          .select("organization_id")
+          .eq("user_id", user.user.id)
+          .single();
+
+        const org = orgData?.organization_id;
+        if (!org) return;
+
+        const { data: inventoryData, error } = await supabase.rpc(
+          "get_inventory_summary",
+          { p_org: org, p_start: "2000-01-01", p_end: new Date().toISOString() }
+        );
+        if (error) throw error;
+
+        const safeData: DataItem[] = inventoryData || [];
+        setData(safeData);
+
+        let revenue = 0,
+          profit = 0,
+          perte = 0,
+          stock = 0,
+          outputs = 0;
+
+        safeData.forEach((d) => {
+          revenue += Number(d.revenue);
+          profit += Number(d.margin);
+          stock += Number(d.stock_theoretical);
+          outputs += Number(d.outputs);
+        });
+
+        if (profit < 0) perte = Math.abs(profit);
+
+        const { data: clientsData } = await supabase
+          .from("clients")
+          .select("id,name,total_debt")
+          .eq("organization_id", org);
+
+        const totalDebt =
+          clientsData?.reduce((acc, c) => acc + Number(c.total_debt), 0) || 0;
+
+        const { data: salesData } = await supabase
+          .from("pos_sales")
+          .select("client_id,total_amount,created_at")
+          .eq("organization_id", org);
+
+        const map: Record<string, number> = {};
+        (salesData || []).forEach((s: any) => {
+          if (!s.client_id) return;
+          map[s.client_id] =
+            (map[s.client_id] || 0) + Number(s.total_amount);
+        });
+
+        const nameMap: Record<string, string> = {};
+        (clientsData || []).forEach((c: any) => {
+          nameMap[c.id] = c.name;
+        });
+
+        const top = Object.entries(map)
+          .map(([id, total]) => ({ name: nameMap[id] || "Client", total }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 5);
+
+        setTopClients(top);
+
+        const { data: debtsData } = await supabase
+          .from("debts")
+          .select("amount,paid_amount,created_at");
+
+        const past30 = Array.from({ length: 30 }, (_, i) =>
+          dayjs().subtract(29 - i, "day").format("YYYY-MM-DD")
+        );
+
+        const trendData = past30.map((date) => {
+          const daySales = (salesData || []).filter((s: any) =>
+            dayjs(s.created_at).format("YYYY-MM-DD") === date
+          );
+
+          const dayDebts = (debtsData || []).filter((d: any) =>
+            dayjs(d.created_at).format("YYYY-MM-DD") === date
+          );
+
+          return {
+            date,
+            revenue: daySales.reduce(
+              (acc, s) => acc + Number(s.total_amount),
+              0
+            ),
+            debt: dayDebts.reduce(
+              (acc, d) =>
+                acc + (Number(d.amount) - Number(d.paid_amount || 0)),
+              0
+            ),
+          };
+        });
+
+        setTrends(trendData);
+
+        const newAlerts: AlertItem[] = [];
+        safeData.forEach((d) => {
+          if (d.margin < 0)
+            newAlerts.push({ msg: `🔴 ${d.name} en perte`, type: "danger" });
+          if (d.stock_theoretical < 5 && d.outputs > 5)
+            newAlerts.push({ msg: `⚠️ ${d.name} rupture imminente`, type: "warning" });
+          if (Math.abs(d.difference) > 5)
+            newAlerts.push({ msg: `❗ ${d.name} anomalie stock`, type: "info" });
+        });
+
+        setAlerts(newAlerts.slice(0, 5));
+
+        setStats({
+          revenue,
+          profit,
+          perte,
+          stock,
+          outputs,
+          products: safeData.length,
+          clients: clientsData?.length || 0,
+          debt: totalDebt,
+        });
+      } catch (err) {
+        console.error(err);
+        toast.error("Erreur dashboard");
+      }
+    };
+
     load();
   }, []);
 
-  // -------------------- CHARTS --------------------
+  // ---------------- CHARTS ----------------
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: "bottom" as const },
+      tooltip: { enabled: true },
+    },
+  };
+
   const revenueChart = useMemo(
     () => ({
       labels: data.map((d) => d.name),
-      datasets: [
-        {
-          label: "Revenu",
-          data: data.map((d) => d.revenue),
-          backgroundColor: dark ? "#34D399" : "#3B82F6",
-          borderRadius: 6,
-        },
-      ],
+      datasets: [{ data: data.map((d) => d.revenue), backgroundColor: "#3B82F6" }],
     }),
-    [data, dark]
+    [data]
   );
 
   const profitChart = useMemo(
     () => ({
       labels: ["Profit", "Perte"],
-      datasets: [
-        {
-          data: [stats.profit || 0, stats.loss || 0],
-          backgroundColor: [dark ? "#10B981" : "#22C55E", dark ? "#EF4444" : "#F87171"],
-        },
-      ],
+      datasets: [{ data: [stats.profit, stats.perte], backgroundColor: ["#22C55E", "#EF4444"] }],
     }),
-    [stats, dark]
+    [stats]
   );
 
-  const activityChart = useMemo(
+  const debtChart = useMemo(
     () => ({
-      labels: data.map((d) => d.name),
-      datasets: [
-        {
-          label: "Entrées",
-          data: data.map((d) => d.entries),
-          borderColor: "#3B82F6",
-          backgroundColor: "#3B82F6",
-          tension: 0.4,
-        },
-        {
-          label: "Sorties",
-          data: data.map((d) => d.outputs),
-          borderColor: "#F59E0B",
-          backgroundColor: "#F59E0B",
-          tension: 0.4,
-        },
-      ],
+      labels: ["Dettes", "Payé"],
+      datasets: [{ data: [stats.debt, stats.revenue - stats.debt], backgroundColor: ["#F59E0B", "#3B82F6"] }],
     }),
-    [data]
+    [stats]
+  );
+
+  const trendRevenueChart = useMemo(
+    () => ({
+      labels: trends.map((t) => dayjs(t.date).format("DD/MM")),
+      datasets: [{ label: "Ventes", data: trends.map((t) => t.revenue), borderColor: "#3B82F6", tension: 0.3 }],
+    }),
+    [trends]
+  );
+
+  const trendDebtChart = useMemo(
+    () => ({
+      labels: trends.map((t) => dayjs(t.date).format("DD/MM")),
+      datasets: [{ label: "Dettes", data: trends.map((t) => t.debt), borderColor: "#F59E0B", tension: 0.3 }],
+    }),
+    [trends]
+  );
+
+  const topClientsChart = useMemo(
+    () => ({
+      labels: topClients.map((c) => c.name),
+      datasets: [{ data: topClients.map((c) => c.total), backgroundColor: "#3B82F6" }],
+    }),
+    [topClients]
   );
 
   return (
-    <div className={dark ? "dark" : ""}>
-      <Toaster position="top-right" reverseOrder={false} />
-      <main className="p-4 md:p-6 space-y-6 min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors">
+    <main className="p-4 md:p-6 space-y-6 bg-gray-100 min-h-screen">
+      <Toaster />
 
-        {/* ----- KPI CARDS ----- */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Card label="💰 Revenu" value={stats.revenue} green />
-          <Card label="📈 Profit" value={stats.profit} green alert={stats.profit < 0} />
-          <Card label="📉 Perte" value={stats.loss} red />
-          <Card label="📦 Stock Total" value={stats.stock} />
-          <Card label="📤 Sorties" value={stats.outputs} />
-          <Card label="🧾 Produits" value={stats.products} />
+      {/* KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        {Object.entries(stats).map(([key, value]) => (
+          <Card key={key} label={key} value={value} />
+        ))}
+      </div>
+
+      {/* ALERTS */}
+      <div className="bg-white p-4 rounded-xl shadow">
+        <h2 className="font-bold mb-2">Alertes</h2>
+        {alerts.length > 0 ? alerts.map((a, i) => <div key={i}>{a.msg}</div>) : <div className="text-gray-500">Aucune alerte</div>}
+      </div>
+
+      {/* GRILLE DES CHARTS */}
+      <div className="grid lg:grid-cols-4 md:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Bar data={revenueChart} options={chartOptions} />
         </div>
-
-        {/* ----- ALERTS ----- */}
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow space-y-2">
-          <h2 className="font-bold text-lg mb-2">🧠 Alertes intelligentes</h2>
-          <AnimatePresence>
-            {alerts.length === 0 ? (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-gray-400"
-              >
-                Aucune alerte
-              </motion.p>
-            ) : (
-              alerts.map((a, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.3 }}
-                  className={`px-3 py-1 rounded-full text-sm font-medium inline-block ${
-                    a.type === "danger"
-                      ? "bg-red-100 dark:bg-red-700 text-red-700 dark:text-red-100"
-                      : a.type === "warning"
-                      ? "bg-yellow-100 dark:bg-yellow-700 text-yellow-700 dark:text-yellow-100"
-                      : "bg-blue-100 dark:bg-blue-700 text-blue-700 dark:text-blue-100"
-                  }`}
-                >
-                  {a.msg}
-                </motion.div>
-              ))
-            )}
-          </AnimatePresence>
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Doughnut data={profitChart} options={chartOptions} />
         </div>
-
-        {/* ----- CHARTS ----- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <ChartCard title="Revenue">
-            <Bar data={revenueChart} options={{ responsive: true, plugins: { legend: { display: false } } }} />
-          </ChartCard>
-
-          <ChartCard title="Profit vs Perte">
-            <Doughnut data={profitChart} options={{ responsive: true }} />
-          </ChartCard>
-
-          <ChartCard title="Activité">
-            <Line data={activityChart} options={{ responsive: true, plugins: { legend: { position: "bottom" } } }} />
-          </ChartCard>
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Doughnut data={debtChart} options={chartOptions} />
         </div>
-      </main>
-    </div>
-  );
-}
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Bar data={topClientsChart} options={chartOptions} />
+        </div>
+      </div>
 
-// -------------------- CARD COMPONENT --------------------
-type CardProps = {
-  label: string;
-  value: number;
-  green?: boolean;
-  red?: boolean;
-  alert?: boolean;
-};
-
-function Card({ label, value, green, red, alert }: CardProps) {
-  return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      className={`bg-white dark:bg-gray-800 p-4 rounded-2xl shadow hover:shadow-lg transition flex flex-col justify-between border-2 ${
-        alert ? "border-red-400 dark:border-red-600" : "border-transparent"
-      }`}
-    >
-      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-      <p
-        className={`text-xl font-bold ${
-          green ? "text-green-500" : red ? "text-red-500" : "text-gray-700 dark:text-gray-200"
-        }`}
-      >
-        {Math.round(value || 0)}
-      </p>
-    </motion.div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Line data={trendRevenueChart} options={chartOptions} />
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow h-96">
+          <Line data={trendDebtChart} options={chartOptions} />
+        </div>
+      </div>
+    </main>
   );
 }
 
-// -------------------- CHART CARD COMPONENT --------------------
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+// ---------------- CARD ----------------
+function Card({ label, value }: any) {
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow hover:shadow-lg transition flex flex-col">
-      <h3 className="mb-3 font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
-      <div className="flex-1 h-[220px] md:h-[250px]">{children}</div>
+    <div className="bg-white p-4 rounded-xl shadow flex flex-col items-start justify-center">
+      <p className="text-xs text-gray-500 capitalize">{label}</p>
+      <p className="font-bold text-lg">{Math.round(value || 0)}</p>
     </div>
   );
 }

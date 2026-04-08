@@ -1,3 +1,4 @@
+// src/hooks/useOrganization.ts
 import { useEffect, useState } from "react";
 import { supabase } from "../services/supabaseClient";
 
@@ -6,18 +7,21 @@ export function useOrganization() {
   const [loading, setLoading] = useState(true);
 
   const fetchOrganization = async () => {
-    const { data, error } = await supabase
-      .from("user_organizations")
-      .select("organization_id")
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("user_organizations")
+        .select("organization_id")
+        .single(); // si plusieurs orgs, remplacer par .maybeSingle() ou .limit(1)
 
-    if (error) {
-      console.error("Erreur org:", error);
-    } else {
-      setOrganizationId(data.organization_id);
+      if (error) throw error;
+
+      setOrganizationId(data?.organization_id || null);
+    } catch (err) {
+      console.error("Erreur récupération org:", err);
+      setOrganizationId(null);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
