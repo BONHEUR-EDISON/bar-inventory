@@ -185,7 +185,7 @@ export default function ClientsPage() {
               key={c.id}
               className="bg-white p-4 rounded-xl shadow-md space-y-2"
             >
-              <h2 className="text-lg font-semibold">{c.name}</h2>
+              <h2 className="text-gray-700 font-semibold">{c.name}</h2>
               <p className="text-gray-500">{c.phone || "-"}</p>
               <p className="text-gray-500">{c.email || "-"}</p>
 
