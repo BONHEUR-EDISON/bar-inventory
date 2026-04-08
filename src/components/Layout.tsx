@@ -37,7 +37,7 @@ export default function Layout() {
       {/* =========================
           SIDEBAR DESKTOP
       ========================= */}
-      <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 border-r border-gray-200 dark:border-gray-800">
+      <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 border-r bg-gray-100 dark:bg-gray-900 transition-colors">
         <Sidebar close={undefined} />
       </aside>
 
@@ -77,7 +77,7 @@ export default function Layout() {
         </div>
 
         {/* CONTENT */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-4 md:px-6 py-4">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-2 sm:px-4 md:px-6 py-4 bg-gray-100 dark:bg-gray-900 transition-colors">
           <div className="max-w-7xl mx-auto w-full">
             {/* wrapper responsive pour tableaux ou images */}
             <div className="overflow-x-auto">{/* Outlet */}

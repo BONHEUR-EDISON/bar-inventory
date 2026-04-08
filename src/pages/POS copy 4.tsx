@@ -1,9 +1,10 @@
+'use client';
+
 import { useEffect, useState, useRef } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { supabase } from "../services/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sun, Moon } from "lucide-react";
-import Ticket58mm from "../components/Ticket58mm";
 
 // ================= TYPES =================
 interface Product {
@@ -37,7 +38,6 @@ export default function POS() {
     const [selectedCategory, setSelectedCategory] = useState("All");
     const [mobileCartOpen, setMobileCartOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(false);
-    const [lastSale, setLastSale] = useState<CartItem[]>([]);
 
     const productRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [flyingItems, setFlyingItems] = useState<any[]>([]);
@@ -165,9 +165,6 @@ export default function POS() {
                 : "Vente validée ✅"
             );
 
-            // Stocker la vente pour impression ticket
-            setLastSale(cart);
-
             setCart([]);
             setSelectedClient(null);
             setPaymentMethod('cash');
@@ -189,7 +186,7 @@ export default function POS() {
 
     // ================= UI =================
     return (
-        <div className={`${darkMode ? 'dark' : ''} flex flex-col md:flex-row h-screen bg-gray-100 dark:bg-gray-900 font-sans relative`}>
+        <div className={`${darkMode ? 'dark' : ''} flex h-screen bg-gray-100 dark:bg-gray-900 font-sans relative`}>
             <Toaster />
 
             {/* HEADER TOGGLE */}
@@ -200,10 +197,10 @@ export default function POS() {
             </div>
 
             {/* PRODUITS */}
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className="flex-1 p-6 overflow-y-auto">
                 <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">Point de Vente</h1>
 
-                <div className="flex gap-3 mb-4 flex-col md:flex-row">
+                <div className="flex gap-3 mb-6 flex-col md:flex-row">
                     <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -236,79 +233,12 @@ export default function POS() {
                 </div>
             </div>
 
-            {/* MINI-CART MOBILE */}
-            <AnimatePresence>
-                {isMobile && mobileCartOpen && (
-                    <motion.div
-                        initial={{ x: '100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '100%' }}
-                        transition={{ type: "tween", duration: 0.3 }}
-                        className="fixed top-0 right-0 w-60 h-full bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-xl z-50 flex flex-col p-4"
-                    >
-                        <div className="flex justify-between items-center mb-4">
-                            <div className="cart-target font-bold text-lg text-gray-800 dark:text-gray-100">Panier ({cart.length})</div>
-                            <button onClick={() => setMobileCartOpen(false)}><X className="text-gray-800 dark:text-gray-200"/></button>
-                        </div>
-
-                        <select
-                            value={selectedClient?.id || ""}
-                            onChange={(e) => {
-                                const c = clients.find(x => x.id === e.target.value) || null;
-                                setSelectedClient(c);
-                            }}
-                            className="mb-3 p-3 border rounded-lg shadow-sm backdrop-blur-sm bg-white/30 dark:bg-gray-800/30 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-900 dark:text-gray-100"
-                        >
-                            <option value="">Client anonyme</option>
-                            {clients.map(c => (
-                                <option key={c.id} value={c.id}>
-                                    {c.name} {c.total_debt > 0 && `(Dette: ${c.total_debt}$)`}
-                                </option>
-                            ))}
-                        </select>
-
-                        <select
-                            value={paymentMethod}
-                            onChange={(e) => setPaymentMethod(e.target.value as any)}
-                            className="mb-3 p-3 border rounded-lg shadow-sm backdrop-blur-sm bg-white/30 dark:bg-gray-800/30 focus:outline-none focus:ring-2 focus:ring-indigo-400 text-gray-900 dark:text-gray-100"
-                        >
-                            <option value="cash">Cash</option>
-                            <option value="mobile">Mobile</option>
-                            <option value="bank">Banque</option>
-                            <option value="credit">Crédit</option>
-                        </select>
-
-                        <div className="flex-1 overflow-y-auto max-h-[60vh] space-y-2">
-                            {cart.map(item => (
-                                <div key={item.id} className="flex justify-between items-center mb-2 bg-white/40 dark:bg-gray-800/40 backdrop-blur-sm p-2 rounded-lg shadow-sm text-gray-900 dark:text-gray-100">
-                                    <span>{item.name}</span>
-                                    <div className="flex items-center gap-2">
-                                        <button className="px-2 py-1 bg-gray-200/70 dark:bg-gray-700/50 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition" onClick={() => updateQuantity(item.id, item.quantity - 1)}>-</button>
-                                        <span>{item.quantity}</span>
-                                        <button className="px-2 py-1 bg-gray-200/70 dark:bg-gray-700/50 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="mt-4">
-                            <p className="font-bold text-lg text-gray-800 dark:text-gray-100">Total: {total.toFixed(2)} $</p>
-                            <button
-                                onClick={handleCheckout}
-                                className="w-full bg-indigo-600 text-white py-3 rounded-xl mt-3 hover:bg-indigo-700 transition-colors shadow-lg"
-                            >
-                                Valider
-                            </button>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
             {/* PANIER FIXE DESKTOP */}
             {!isMobile && (
                 <div className="w-96 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-xl p-6 flex flex-col">
                     <div className="cart-target mb-4 font-bold text-xl text-gray-800 dark:text-gray-100">Panier ({cart.length})</div>
 
+                    {/* CLIENT */}
                     <select
                         value={selectedClient?.id || ""}
                         onChange={(e) => {
@@ -325,6 +255,7 @@ export default function POS() {
                         ))}
                     </select>
 
+                    {/* PAYMENT */}
                     <select
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value as any)}
@@ -336,6 +267,7 @@ export default function POS() {
                         <option value="credit">Crédit</option>
                     </select>
 
+                    {/* ITEMS */}
                     <div className="flex-1 overflow-y-auto max-h-[70vh] space-y-2">
                         {cart.map(item => (
                             <div key={item.id} className="flex justify-between items-center mb-2 bg-white/40 dark:bg-gray-800/40 backdrop-blur-sm p-2 rounded-lg shadow-sm text-gray-900 dark:text-gray-100">
@@ -373,16 +305,6 @@ export default function POS() {
                     />
                 ))}
             </AnimatePresence>
-
-            {/* TICKET 58MM */}
-            {lastSale.length > 0 && (
-                <Ticket58mm
-                    orgName="Ma Société"
-                    clientName={selectedClient?.name}
-                    items={lastSale}
-                    total={lastSale.reduce((s, i) => s + i.sale_price * i.quantity, 0)}
-                />
-            )}
         </div>
     );
 }

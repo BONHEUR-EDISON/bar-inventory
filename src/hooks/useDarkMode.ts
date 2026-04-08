@@ -1,24 +1,29 @@
-import { useEffect, useState } from "react";
+// src/hooks/useDarkMode.ts
+import { useState, useEffect } from "react";
+
+const DARK_KEY = "bar-inventory-dark-mode";
 
 export function useDarkMode() {
-  // État typé en boolean
-  const [dark, setDark] = useState<boolean>(() => {
-    // Vérifie si localStorage existe (ex: SSR sécurité)
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("theme") === "dark";
-    }
-    return false; // valeur par défaut
-  });
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // Lire la préférence depuis localStorage
+    const stored = localStorage.getItem(DARK_KEY);
+    if (stored !== null) {
+      setDark(stored === "true");
+    } else {
+      // Sinon détecter préférences système
+      setDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+  }, []);
 
+  useEffect(() => {
+    // Mettre à jour localStorage et <html> classe
+    localStorage.setItem(DARK_KEY, dark.toString());
     if (dark) {
       document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
     }
   }, [dark]);
 
