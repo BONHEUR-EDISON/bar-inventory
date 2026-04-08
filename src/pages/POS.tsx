@@ -223,7 +223,7 @@ export default function POS() {
                     {filtered.map(p => (
                         <motion.div
                             key={p.id}
-                            ref={(el) => (productRefs.current[p.id] = el)}
+                            ref={(el) => { productRefs.current[p.id] = el; }}
                             className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-md p-4 rounded-xl shadow-md hover:shadow-xl cursor-pointer flex flex-col justify-between transition-transform duration-200 text-gray-900 dark:text-gray-100"
                             whileHover={{ scale: 1.05 }}
                             onClick={() => addToCart(p)}

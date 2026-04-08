@@ -14,16 +14,17 @@ import POS from "./pages/POS";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAutoLogout } from "./hooks/useAutoLogout";
-import InstallPWA from "./components/InstallPWA";
-import UpdatePWA from "./components/UpdatePWA";
+//import InstallPWA from "./components/InstallPWA";
+//import UpdatePWA from "./components/UpdatePWA";
+import SmartPWAButton from "./components/SmartPWAButton";
 
 export default function App() {
   useAutoLogout();
 
   return (
     <BrowserRouter>
-      <InstallPWA />
-      <UpdatePWA />
+      <SmartPWAButton />
+  
 
       <Routes>
         {/* ✅ Route par défaut */}
