@@ -2,8 +2,22 @@ import { useEffect, useState } from "react"
 import { Download, RefreshCw } from "lucide-react"
 import toast from "react-hot-toast"
 
+// Déclaration propre pour l'événement beforeinstallprompt
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: string[]
+  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>
+  prompt(): Promise<void>
+}
+
+// Déclaration globale pour window.updatePWA
+declare global {
+  interface Window {
+    updatePWA?: () => Promise<void>
+  }
+}
+
 export default function SmartPWAButton() {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [visible, setVisible] = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
@@ -11,6 +25,7 @@ export default function SmartPWAButton() {
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [updating, setUpdating] = useState(false)
 
+  // Détection iOS + installation / update events
   useEffect(() => {
     const ua = window.navigator.userAgent.toLowerCase()
     const ios = /iphone|ipad|ipod/.test(ua)
@@ -19,22 +34,19 @@ export default function SmartPWAButton() {
     setIsIOS(ios)
     setIsInstalled(standalone)
 
-    // INSTALL (Android)
-    const installHandler = (e: any) => {
+    const installHandler = (e: Event) => {
+      const evt = e as BeforeInstallPromptEvent
       e.preventDefault()
-      setDeferredPrompt(e)
+      setDeferredPrompt(evt)
       setVisible(true)
     }
 
-    // UPDATE
     const updateHandler = () => {
       setUpdateAvailable(true)
       setVisible(true)
 
-      // AUTO UPDATE SILENCIEUX après 3s
-      setTimeout(() => {
-        autoUpdate()
-      }, 3000)
+      // Auto update silencieux après 3s
+      setTimeout(() => autoUpdate(), 3000)
     }
 
     window.addEventListener("beforeinstallprompt", installHandler)
@@ -46,37 +58,39 @@ export default function SmartPWAButton() {
     }
   }, [])
 
+  // iOS fallback
   useEffect(() => {
     if (isIOS && !isInstalled) setVisible(true)
   }, [isIOS, isInstalled])
 
-  const autoUpdate = async () => {
-    if (!(window as any).updatePWA) return
+  // Auto update
+  const autoUpdate = async (): Promise<void> => {
+    if (!window.updatePWA) return
 
     setUpdating(true)
 
     try {
-      await (window as any).updatePWA()
+      await window.updatePWA()
       toast.success("App mise à jour 🚀")
       setUpdateAvailable(false)
       setVisible(false)
     } catch {
-      toast.error("Erreur update")
+      toast.error("Erreur lors de la mise à jour")
     } finally {
       setUpdating(false)
     }
   }
 
-  const handleClick = async () => {
-    // PRIORITÉ UPDATE
+  const handleClick = async (): Promise<void> => {
+    // Priorité update
     if (updateAvailable) {
-      autoUpdate()
+      await autoUpdate()
       return
     }
 
-    // INSTALL ANDROID
+    // Install Android
     if (deferredPrompt) {
-      deferredPrompt.prompt()
+      await deferredPrompt.prompt()
       const choice = await deferredPrompt.userChoice
 
       if (choice.outcome === "accepted") {
@@ -96,8 +110,6 @@ export default function SmartPWAButton() {
   }
 
   if (!visible) return null
-
-  const icon = updateAvailable ? RefreshCw : Download
 
   return (
     <div className="fixed bottom-5 left-5 z-50">
@@ -138,12 +150,12 @@ export default function SmartPWAButton() {
           ${updateAvailable ? "bg-emerald-600 hover:bg-emerald-700" : "bg-indigo-600 hover:bg-indigo-700"}
         `}
       >
-        {/* Badge rouge iOS */}
+        {/* Badge rouge */}
         {updateAvailable && !updating && (
           <span className="absolute top-1 right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>
         )}
 
-        {/* Pulse si update */}
+        {/* Pulse */}
         {updateAvailable && !updating && (
           <span className="absolute w-full h-full rounded-full bg-emerald-400 opacity-30 animate-ping"></span>
         )}
